@@ -1,0 +1,16 @@
+[project]
+name = "drgn-mcp"
+version = "0.1.0"
+description = "MCP server for drgn programmable debugger"
+requires-python = ">=3.12"
+dependencies = [
+    "drgn",
+    "mcp[cli]",
+]
+
+[project.scripts]
+drgn-mcp = "drgn_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
