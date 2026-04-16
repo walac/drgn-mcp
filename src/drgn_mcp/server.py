@@ -38,12 +38,22 @@ def load_core_dump(
     vmlinux_path: str = "",
     extra_symbols: list[str] | None = None,
 ) -> str:
-    """Load a kernel crash dump for analysis.
+    """Load a vmcore crash dump and optional vmlinux debug symbols.
+
+    CRITICAL: This must be called before any other tool can be used. It initializes
+    the drgn debugging session.
 
     Args:
-        core_path: Path to the core dump file (vmcore)
-        vmlinux_path: Optional path to vmlinux with debug symbols
-        extra_symbols: Optional list of additional symbol file paths
+        core_path: Absolute path to the vmcore crash dump file.
+        vmlinux_path: Optional absolute path to the vmlinux file with DWARF debug info.
+        extra_symbols: Optional list of paths to additional symbol files.
+
+    Returns:
+        A string containing basic program information on success, or an error
+        message if loading fails.
+
+    Examples:
+        load_core_dump("/var/crash/vmcore", "/usr/lib/debug/boot/vmlinux-5.15.0")
     """
     return state.load(core_path, vmlinux_path or None, extra_symbols or None)
 
@@ -52,17 +62,28 @@ def load_core_dump(
 def eval_expression(expression: str) -> str:
     """Evaluate a drgn Python expression or statement.
 
+    Use this as a catch-all for complex queries not covered by specialized tools.
+    Prefer using specialized tools (like get_thread, lookup_symbol) first.
+
     The expression runs in a context with these pre-loaded:
     - prog: the loaded drgn.Program
     - All drgn module attributes (cast, sizeof, container_of, etc.)
     - All drgn.helpers.common helpers
     - All drgn.helpers.linux helpers (if kernel program)
 
+    Args:
+        expression: Python code to evaluate. Tries Python's eval() builtin first,
+            falls back to the exec() builtin on SyntaxError.
+
+    Returns:
+        The captured stdout output or string representation of the result.
+        Truncated at 8KB. Returns an error message if evaluation fails.
+
     Examples:
-        "prog.crashed_thread().stack_trace()"
-        "prog['jiffies']"
-        "for task in for_each_task(prog): print(task.pid.value_(), task.comm.string_())"
-        "print_annotated_stack(prog.stack_trace(prog.crashed_thread()))"
+        eval_expression("prog.crashed_thread().stack_trace()")
+        eval_expression("prog['jiffies']")
+        eval_expression("for task in for_each_task(prog): print(task.pid.value_(), task.comm.string_())")
+        eval_expression("print_annotated_stack(prog.stack_trace(prog.crashed_thread()))")
     """
     state.require_loaded()
 
@@ -99,25 +120,56 @@ def eval_expression(expression: str) -> str:
 
 @mcp.tool()
 def get_program_info() -> str:
-    """Get information about the loaded program (flags, platform, type)."""
+    """Retrieve basic information about the loaded drgn program.
+
+    Use this to check the architecture, platform, and whether the loaded dump
+    is a Linux kernel.
+
+    Returns:
+        A multi-line string detailing the program flags, platform, and kernel status.
+    """
     return state.format_program_info()
 
 
 @mcp.tool()
 def get_crashed_thread() -> str:
-    """Get the thread that caused the crash/panic, including its full stack trace."""
+    """Retrieve the thread that caused the panic along with its stack trace.
+
+    DIFFERENCE FROM get_panic_info: get_crashed_thread returns only the crashed
+    thread and its stack trace; get_panic_info additionally extracts the kernel
+    panic message.
+
+    Returns:
+        A multi-line string showing the crashed thread's metadata and full
+        stack trace.
+    """
     prog = state.require_loaded()
     thread = prog.crashed_thread()
     trace = thread.stack_trace()
-    lines = [f"Crashed thread: tid={thread.tid}, name={thread.name}"]
-    lines.append("\nStack trace:")
-    lines.append(str(trace))
-    return "\n".join(lines)
+    return (
+        f"Crashed thread: tid={thread.tid}, name={thread.name}\n"
+        f"\nStack trace:\n{trace}"
+    )
 
 
 @mcp.tool()
 def get_stack_trace(thread_id: int) -> str:
-    """Get the stack trace for a specific thread by its thread ID."""
+    """Retrieve the stack trace for a specific thread by its ID.
+
+    DIFFERENCE FROM get_thread: get_stack_trace only returns stack frames.
+    Use get_thread if you also need thread metadata (name, state).
+
+    Args:
+        thread_id: The numeric ID of the thread to inspect.
+
+    Returns:
+        A multi-line string showing the stack frames with function names,
+        addresses, and source locations.
+
+    Examples:
+        get_stack_trace(1)
+        get_stack_trace(4096)
+    """
     prog = state.require_loaded()
     trace = prog.stack_trace(thread_id)
     return str(trace)
@@ -125,7 +177,18 @@ def get_stack_trace(thread_id: int) -> str:
 
 @mcp.tool()
 def list_threads(limit: int = 100) -> str:
-    """List all threads in the program. Returns tid and name for each."""
+    """List all threads in the program.
+
+    Use this to get a high-level overview. For detailed inspection of a single
+    thread, use get_thread or get_stack_trace.
+
+    Args:
+        limit: Maximum number of threads to return.
+
+    Returns:
+        A multi-line string listing threads with TID and name.
+        Appends a truncation notice if threads exceed limit.
+    """
     prog = state.require_loaded()
     lines = []
     count = 0
@@ -142,7 +205,22 @@ def list_threads(limit: int = 100) -> str:
 
 @mcp.tool()
 def lookup_object(name: str) -> str:
-    """Look up a global variable, function, or constant by name."""
+    """Look up a global variable, function, or constant by name using DWARF debug info.
+
+    DIFFERENCE FROM lookup_symbol: lookup_object queries DWARF debug info and returns
+    a fully typed drgn Object. Use lookup_symbol to query the raw ELF symbol table
+    when DWARF info is missing or when you need raw addresses and sizes.
+
+    Args:
+        name: The exact name of the variable, function, or constant.
+
+    Returns:
+        The string representation of the drgn Object, showing its type and value.
+
+    Examples:
+        lookup_object("jiffies")
+        lookup_object("init_task")
+    """
     prog = state.require_loaded()
     obj = prog[name]
     return str(obj)
@@ -150,7 +228,22 @@ def lookup_object(name: str) -> str:
 
 @mcp.tool()
 def lookup_type(type_name: str) -> str:
-    """Look up a type definition (struct, union, enum, typedef, etc.)."""
+    """Look up a C type definition by its name.
+
+    Use this to inspect the layout, size, and members of structs, unions,
+    enums, or typedefs.
+
+    Args:
+        type_name: The name of the C type (e.g., "struct task_struct", "pid_t").
+
+    Returns:
+        A multi-line string showing the full C type definition, including
+        member offsets and sizes.
+
+    Examples:
+        lookup_type("struct task_struct")
+        lookup_type("enum pid_type")
+    """
     prog = state.require_loaded()
     t = prog.type(type_name)
     return str(t)
@@ -158,7 +251,18 @@ def lookup_type(type_name: str) -> str:
 
 @mcp.tool()
 def list_tasks(limit: int = 100) -> str:
-    """List all tasks (processes) in the kernel. Shows PID, comm (name), and state."""
+    """List all tasks (processes) in the Linux kernel.
+
+    Use this to get a high-level overview of running processes. For detailed
+    inspection of a specific task, use find_task.
+
+    Args:
+        limit: Maximum number of tasks to return.
+
+    Returns:
+        A multi-line string listing tasks with PID, comm (name), and state
+        character. Appends a truncation notice if tasks exceed limit.
+    """
     prog = state.require_loaded()
     from drgn.helpers.linux.sched import for_each_task, task_state_to_char
 
@@ -178,7 +282,21 @@ def list_tasks(limit: int = 100) -> str:
 
 @mcp.tool()
 def find_task(pid: int) -> str:
-    """Find a task by PID and show detailed information."""
+    """Find a specific Linux kernel task by its PID and show detailed information.
+
+    Use this to deeply inspect a specific process's struct task_struct.
+
+    Args:
+        pid: The numeric Process ID to inspect.
+
+    Returns:
+        A detailed string representation of the task's struct task_struct.
+        Returns an error message if no task is found with the given PID.
+
+    Examples:
+        find_task(1)
+        find_task(1234)
+    """
     prog = state.require_loaded()
     from drgn.helpers.linux.pid import find_task as _find_task
 
@@ -190,22 +308,41 @@ def find_task(pid: int) -> str:
 
 @mcp.tool()
 def list_modules() -> str:
-    """List all loaded kernel modules."""
+    """List all loaded kernel modules.
+
+    Use this to see which kernel modules (.ko) were loaded at the time
+    of the crash.
+
+    Returns:
+        A multi-line string listing the names of all loaded kernel modules.
+    """
     prog = state.require_loaded()
     from drgn.helpers.linux.module import for_each_module
 
-    lines = []
-    for mod in for_each_module(prog):
-        name = mod.name.string_().decode()
-        lines.append(name)
-    return "\n".join(lines) if lines else "No modules loaded"
+    names = [mod.name.string_().decode() for mod in for_each_module(prog)]
+    return "\n".join(names) if names else "No modules loaded"
 
 
 @mcp.tool()
 def read_memory(address: int | str, size: int = 64) -> str:
-    """Read raw memory at the given address.
-    Address should be a hex string (e.g., '0xffffffff81000000') or integer.
-    Returns a hex dump. Max 4096 bytes."""
+    """Read raw memory at the given address and return a hex dump.
+
+    DIFFERENCE FROM read_typed_memory: read_memory returns a raw hex dump
+    with ASCII representation. Prefer read_typed_memory when you know the
+    underlying data type (e.g., u64, c_string).
+
+    Args:
+        address: The memory address to read from. Can be an integer or hex string.
+        size: Number of bytes to read. Maximum is 4096 bytes.
+
+    Returns:
+        A multi-line hex dump showing address, hex bytes, and ASCII
+        representation (16 bytes per line).
+
+    Examples:
+        read_memory("0xffffffff81000000", size=128)
+        read_memory(0xffffffff81000000)
+    """
     prog = state.require_loaded()
     addr = address if isinstance(address, int) else int(address, 0)
     size = min(size, 4096)
@@ -221,7 +358,14 @@ def read_memory(address: int | str, size: int = 64) -> str:
 
 @mcp.tool()
 def get_dmesg() -> str:
-    """Get the kernel log buffer (dmesg output)."""
+    """Retrieve the kernel log buffer (dmesg output).
+
+    Use this to read the kernel logs leading up to the crash.
+
+    Returns:
+        A multi-line string containing timestamped kernel log messages.
+        Truncates from the front at 8KB, keeping the most recent messages.
+    """
     prog = state.require_loaded()
     from drgn.helpers.linux.printk import get_printk_records
 
@@ -239,8 +383,17 @@ def get_dmesg() -> str:
 
 @mcp.tool()
 def get_panic_info() -> str:
-    """Get information about the kernel panic/crash, including the panic message
-    and the crashed thread's stack trace."""
+    """Retrieve the kernel panic message and the crashed thread's stack trace.
+
+    DIFFERENCE FROM get_crashed_thread: get_panic_info also extracts the specific
+    panic message from the kernel. Use get_dmesg if you need the full kernel
+    log context.
+
+    Returns:
+        A multi-line string containing the panic message (if found) followed
+        by the crashed thread's stack trace. Returns partial results if
+        extraction fails for either component.
+    """
     prog = state.require_loaded()
     lines = []
     try:
