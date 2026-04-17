@@ -370,3 +370,81 @@ def get_kconfig(key: str = "") -> str:
     if len(output) > max_len:
         output = output[:max_len] + f"\n... (truncated, {len(output)} total chars)"
     return output
+
+
+@mcp.tool()
+def get_cmdline(pid: int) -> str:
+    """Get the command line arguments of a process.
+
+    Use this to see how a process was invoked, including all its arguments.
+    Returns None-equivalent for kernel threads (which have no userspace
+    command line).
+
+    Args:
+        pid: The PID of the task whose command line to retrieve.
+
+    Returns:
+        The command line as a space-separated string of arguments.
+        Returns an error if the task is not found or is a kernel thread.
+
+    Examples:
+        get_cmdline(1)
+        get_cmdline(1234)
+    """
+    prog = state.require_loaded()
+    from drgn.helpers.linux.mm import cmdline
+    from drgn.helpers.linux.pid import find_task as _find_task
+
+    task = _find_task(prog, pid)
+    if task is None:
+        return f"No task found with PID {pid}"
+
+    try:
+        args = cmdline(task)
+    except drgn.FaultError as e:
+        return f"Memory fault reading command line for PID {pid}: {e}"
+    if args is None:
+        return f"Task {pid} is a kernel thread (no command line)"
+
+    return " ".join(a.decode(errors="replace") for a in args)
+
+
+@mcp.tool()
+def get_environ(pid: int) -> str:
+    """Get the environment variables of a process.
+
+    Use this to inspect the environment a process was running with at
+    crash time. Returns None-equivalent for kernel threads.
+
+    Args:
+        pid: The PID of the task whose environment to retrieve.
+
+    Returns:
+        The environment variables, one per line as KEY=VALUE pairs.
+        Truncated at 8KB. Returns an error if the task is not found
+        or is a kernel thread.
+
+    Examples:
+        get_environ(1)
+        get_environ(1234)
+    """
+    prog = state.require_loaded()
+    from drgn.helpers.linux.mm import environ
+    from drgn.helpers.linux.pid import find_task as _find_task
+
+    task = _find_task(prog, pid)
+    if task is None:
+        return f"No task found with PID {pid}"
+
+    try:
+        env = environ(task)
+    except drgn.FaultError as e:
+        return f"Memory fault reading environment for PID {pid}: {e}"
+    if env is None:
+        return f"Task {pid} is a kernel thread (no environment)"
+
+    output = "\n".join(e.decode(errors="replace") for e in env)
+    max_len = 8000
+    if len(output) > max_len:
+        output = output[:max_len] + f"\n... (truncated, {len(output)} total chars)"
+    return output
