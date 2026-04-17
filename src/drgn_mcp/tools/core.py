@@ -1,4 +1,5 @@
 import contextlib
+import inspect
 import io
 import traceback
 
@@ -109,7 +110,7 @@ def list_helpers(module: str = "") -> str:
 
     Use this to discover what functions are available before writing
     eval_expression calls. Shows functions grouped by module with their
-    names.
+    names, signatures, and brief descriptions.
 
     Args:
         module: Optional module filter. If provided, only show helpers from
@@ -119,7 +120,8 @@ def list_helpers(module: str = "") -> str:
     Returns:
         If module is empty: a summary of all helper modules with function
         counts.
-        If module is provided: all exported function names from that module.
+        If module is provided: each function with its signature and
+        one-line description, ready for use in eval_expression calls.
 
     Examples:
         list_helpers()
@@ -132,7 +134,8 @@ def list_helpers(module: str = "") -> str:
 
     import drgn.helpers.linux
 
-    modules = {}
+    module_objs: dict[str, object] = {}
+    modules: dict[str, list[str]] = {}
     for mod_info in pkgutil.iter_modules(
         drgn.helpers.linux.__path__,
         prefix="drgn.helpers.linux.",
@@ -141,13 +144,34 @@ def list_helpers(module: str = "") -> str:
         all_names = getattr(mod, "__all__", [])
         short_name = mod_info.name.rsplit(".", 1)[-1]
         modules[short_name] = sorted(all_names)
+        module_objs[short_name] = mod
 
     if module:
         if module not in modules:
             available = ", ".join(sorted(modules.keys()))
             return f"Unknown module '{module}'. Available: {available}"
+        mod = module_objs[module]
         names = modules[module]
-        return f"{module} ({len(names)} functions):\n" + "\n".join(names)
+        lines = [f"{module} ({len(names)} functions):"]
+        for name in names:
+            fn = getattr(mod, name, None)
+            if fn is None or not callable(fn):
+                lines.append(f"  {name}")
+                continue
+            try:
+                sig = str(inspect.signature(fn))
+            except (ValueError, TypeError):
+                sig = "(...)"
+            doc = inspect.getdoc(fn)
+            first_line = doc.split("\n", 1)[0] if doc else ""
+            lines.append(f"  {name}{sig}")
+            if first_line:
+                lines.append(f"      {first_line}")
+        output = "\n".join(lines)
+        max_len = 8000
+        if len(output) > max_len:
+            output = output[:max_len] + f"\n... (truncated, {len(output)} total chars)"
+        return output
 
     lines = []
     for name in sorted(modules.keys()):
