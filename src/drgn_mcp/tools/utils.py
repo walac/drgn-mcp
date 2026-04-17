@@ -73,9 +73,7 @@ def annotated_stack(thread_id: int) -> str:
         with contextlib.redirect_stdout(stdout_capture):
             print_annotated_stack(trace)
     except drgn.FaultError as e:
-        stdout_capture.write(
-            f"\n... Annotation aborted due to memory fault: {e}"
-        )
+        stdout_capture.write(f"\n... Annotation aborted due to memory fault: {e}")
 
     output = stdout_capture.getvalue()
     max_len = 8000
@@ -114,7 +112,14 @@ def read_percpu(var_expr: str, cpu: int = -1) -> str:
 
     try:
         var = _eval_expr(var_expr)
-    except (drgn.FaultError, LookupError, ValueError, SyntaxError, AttributeError, TypeError) as e:
+    except (
+        drgn.FaultError,
+        LookupError,
+        ValueError,
+        SyntaxError,
+        AttributeError,
+        TypeError,
+    ) as e:
         return f"Error evaluating expression: {e}"
 
     if cpu >= 0:

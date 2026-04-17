@@ -21,10 +21,7 @@ def get_crashed_thread() -> str:
     prog = state.require_loaded()
     thread = prog.crashed_thread()
     trace = thread.stack_trace()
-    return (
-        f"Crashed thread: tid={thread.tid}, name={thread.name}\n"
-        f"\nStack trace:\n{trace}"
-    )
+    return f"Crashed thread: tid={thread.tid}, name={thread.name}\n\nStack trace:\n{trace}"
 
 
 @mcp.tool()
@@ -223,9 +220,7 @@ def lookup_symbol(address_or_name: int | str, limit: int = 100) -> str:
     ]
     if len(syms) > limit:
         remaining = len(syms) - limit
-        lines.append(
-            f"... ({remaining} more symbols, use higher limit to see all)"
-        )
+        lines.append(f"... ({remaining} more symbols, use higher limit to see all)")
     return "\n".join(lines)
 
 

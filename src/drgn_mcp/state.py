@@ -29,9 +29,7 @@ class DrgnState:
         extra_symbols: Optional[list[str]] = None,
     ) -> str:
         if self.prog is not None:
-            raise RuntimeError(
-                "A program is already loaded. Restart the server to load a new one."
-            )
+            raise RuntimeError("A program is already loaded. Restart the server to load a new one.")
 
         prog = drgn.Program()
         prog.set_core_dump(core_path)

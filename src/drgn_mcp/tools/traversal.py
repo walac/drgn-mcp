@@ -52,7 +52,14 @@ def traverse_list(
 
     try:
         head_obj = _eval_expr(head_expr)
-    except (drgn.FaultError, LookupError, ValueError, SyntaxError, AttributeError, TypeError) as e:
+    except (
+        drgn.FaultError,
+        LookupError,
+        ValueError,
+        SyntaxError,
+        AttributeError,
+        TypeError,
+    ) as e:
         return f"Error evaluating head expression: {e}"
 
     type_name = head_obj.type_.type_name()
@@ -78,11 +85,7 @@ def traverse_list(
                 lines.append(f"... (limited to {limit} entries)")
                 break
             if fmt_code:
-                lines.append(
-                    str(eval(  # noqa: S307
-                        fmt_code, {**state.globals, "entry": entry}
-                    ))
-                )
+                lines.append(str(eval(fmt_code, {**state.globals, "entry": entry})))  # noqa: S307
             else:
                 lines.append(f"{entry.value_():#x}")
             count += 1
@@ -133,7 +136,14 @@ def traverse_rbtree(
 
     try:
         root_obj = _eval_expr(root_expr)
-    except (drgn.FaultError, LookupError, ValueError, SyntaxError, AttributeError, TypeError) as e:
+    except (
+        drgn.FaultError,
+        LookupError,
+        ValueError,
+        SyntaxError,
+        AttributeError,
+        TypeError,
+    ) as e:
         return f"Error evaluating root expression: {e}"
 
     fmt_code = None
@@ -146,18 +156,12 @@ def traverse_rbtree(
     lines = []
     count = 0
     try:
-        for entry in rbtree_inorder_for_each_entry(
-            entry_type, root_obj, member
-        ):
+        for entry in rbtree_inorder_for_each_entry(entry_type, root_obj, member):
             if count >= limit:
                 lines.append(f"... (limited to {limit} entries)")
                 break
             if fmt_code:
-                lines.append(
-                    str(eval(  # noqa: S307
-                        fmt_code, {**state.globals, "entry": entry}
-                    ))
-                )
+                lines.append(str(eval(fmt_code, {**state.globals, "entry": entry})))  # noqa: S307
             else:
                 lines.append(f"{entry.value_():#x}")
             count += 1
@@ -202,7 +206,14 @@ def traverse_xarray(
 
     try:
         xa_obj = _eval_expr(xa_expr)
-    except (drgn.FaultError, LookupError, ValueError, SyntaxError, AttributeError, TypeError) as e:
+    except (
+        drgn.FaultError,
+        LookupError,
+        ValueError,
+        SyntaxError,
+        AttributeError,
+        TypeError,
+    ) as e:
         return f"Error evaluating xarray expression: {e}"
 
     fmt_code = None
@@ -221,10 +232,12 @@ def traverse_xarray(
                 break
             if fmt_code:
                 lines.append(
-                    str(eval(  # noqa: S307
-                        fmt_code,
-                        {**state.globals, "index": index, "entry": entry},
-                    ))
+                    str(
+                        eval(  # noqa: S307
+                            fmt_code,
+                            {**state.globals, "index": index, "entry": entry},
+                        )
+                    )
                 )
             else:
                 lines.append(f"{index}: {entry.value_():#x}")
@@ -272,7 +285,14 @@ def traverse_idr(
 
     try:
         idr_obj = _eval_expr(idr_expr)
-    except (drgn.FaultError, LookupError, ValueError, SyntaxError, AttributeError, TypeError) as e:
+    except (
+        drgn.FaultError,
+        LookupError,
+        ValueError,
+        SyntaxError,
+        AttributeError,
+        TypeError,
+    ) as e:
         return f"Error evaluating IDR expression: {e}"
 
     fmt_code = None
@@ -291,10 +311,12 @@ def traverse_idr(
                 break
             if fmt_code:
                 lines.append(
-                    str(eval(  # noqa: S307
-                        fmt_code,
-                        {**state.globals, "id": id, "entry": entry},
-                    ))
+                    str(
+                        eval(  # noqa: S307
+                            fmt_code,
+                            {**state.globals, "id": id, "entry": entry},
+                        )
+                    )
                 )
             else:
                 lines.append(f"{id}: {entry.value_():#x}")

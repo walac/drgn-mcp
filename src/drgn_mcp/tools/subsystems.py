@@ -160,7 +160,14 @@ def get_lock_info(lock_expr: str) -> str:
 
     try:
         lock_obj = _eval_expr(lock_expr)
-    except (drgn.FaultError, LookupError, ValueError, SyntaxError, AttributeError, TypeError) as e:
+    except (
+        drgn.FaultError,
+        LookupError,
+        ValueError,
+        SyntaxError,
+        AttributeError,
+        TypeError,
+    ) as e:
         return f"Error evaluating lock expression: {e}"
 
     type_name = lock_obj.type_.type_name()
@@ -224,9 +231,7 @@ def list_irqs(limit: int = 256) -> str:
         chip = irq_desc_chip_name(desc)
         chip_str = chip.decode(errors="replace") if chip else "none"
         actions = irq_desc_action_names(desc)
-        action_str = ", ".join(
-            a.decode(errors="replace") for a in actions
-        ) if actions else "none"
+        action_str = ", ".join(a.decode(errors="replace") for a in actions) if actions else "none"
         lines.append(f"IRQ {irq_num}: chip={chip_str} actions=[{action_str}]")
         count += 1
 
@@ -295,10 +300,7 @@ def list_bpf(bpf_type: str = "progs", limit: int = 100) -> str:
                 lines.append(f"link id={link_id} type={link_type}")
                 count += 1
         case _:
-            return (
-                f"Unknown BPF type '{bpf_type}'. "
-                "Use: progs, maps, links."
-            )
+            return f"Unknown BPF type '{bpf_type}'. Use: progs, maps, links."
 
     return "\n".join(lines) if lines else f"No BPF {bpf_type} found"
 
@@ -328,10 +330,7 @@ def get_cpu_info() -> str:
     possible = num_possible_cpus(prog)
     online_cpus = list(for_each_online_cpu(prog))
 
-    return (
-        f"Online CPUs: {online}/{possible}\n"
-        f"Online CPU IDs: {online_cpus}"
-    )
+    return f"Online CPUs: {online}/{possible}\nOnline CPU IDs: {online_cpus}"
 
 
 @mcp.tool()
@@ -492,25 +491,16 @@ def list_timers(timer_type: str = "wheel", limit: int = 100) -> str:
                 bases = per_cpu(prog["timer_bases"], cpu)
                 for i, name in enumerate(base_names):
                     try:
-                        for timer in timer_base_for_each(
-                            bases[i].address_of_()
-                        ):
+                        for timer in timer_base_for_each(bases[i].address_of_()):
                             if count >= limit:
-                                lines.append(
-                                    f"... (limited to {limit} timers)"
-                                )
+                                lines.append(f"... (limited to {limit} timers)")
                                 return "\n".join(lines)
                             fn = timer.function
                             expires = timer.expires.value_()
-                            lines.append(
-                                f"cpu={cpu} base={name} "
-                                f"fn={fn} expires={expires}"
-                            )
+                            lines.append(f"cpu={cpu} base={name} fn={fn} expires={expires}")
                             count += 1
                     except drgn.FaultError as e:
-                        lines.append(
-                            f"cpu={cpu} base={name}: <fault: {e}>"
-                        )
+                        lines.append(f"cpu={cpu} base={name}: <fault: {e}>")
         case "hrtimer":
             from drgn.helpers.linux.timer import (
                 hrtimer_clock_base_for_each,
@@ -524,30 +514,20 @@ def list_timers(timer_type: str = "wheel", limit: int = 100) -> str:
                     continue
                 for idx, clock_base in enumerate(cpu_base.clock_base):
                     try:
-                        for hrt in hrtimer_clock_base_for_each(
-                            clock_base.address_of_()
-                        ):
+                        for hrt in hrtimer_clock_base_for_each(clock_base.address_of_()):
                             if count >= limit:
-                                lines.append(
-                                    f"... (limited to {limit} timers)"
-                                )
+                                lines.append(f"... (limited to {limit} timers)")
                                 return "\n".join(lines)
                             fn = hrt.function
                             softexpires = hrt._softexpires.value_()
                             lines.append(
-                                f"cpu={cpu} clock_base={idx} "
-                                f"fn={fn} softexpires={softexpires}"
+                                f"cpu={cpu} clock_base={idx} fn={fn} softexpires={softexpires}"
                             )
                             count += 1
                     except drgn.FaultError as e:
-                        lines.append(
-                            f"cpu={cpu} clock_base={idx}: <fault: {e}>"
-                        )
+                        lines.append(f"cpu={cpu} clock_base={idx}: <fault: {e}>")
         case _:
-            return (
-                f"Unknown timer type '{timer_type}'. "
-                "Use: wheel, hrtimer."
-            )
+            return f"Unknown timer type '{timer_type}'. Use: wheel, hrtimer."
 
     return "\n".join(lines) if lines else f"No {timer_type} timers found"
 
@@ -678,9 +658,7 @@ def get_running_tasks() -> str:
             pid = task.pid.value_()
             comm = task.comm.string_().decode(errors="replace")
             state_char = task_state_to_char(task)
-            lines.append(
-                f"cpu={cpu} pid={pid} comm={comm} state={state_char}"
-            )
+            lines.append(f"cpu={cpu} pid={pid} comm={comm} state={state_char}")
         except drgn.FaultError as e:
             lines.append(f"cpu={cpu}: <fault: {e}>")
 

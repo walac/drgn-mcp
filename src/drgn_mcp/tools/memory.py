@@ -51,8 +51,8 @@ def get_dmesg() -> str:
     from drgn.helpers.linux.printk import get_printk_records
 
     lines = [
-        f"[{r.timestamp.total_seconds():>12.6f}] {r.text}"  # type: ignore[union-attr]
-        for r in get_printk_records(prog)
+        f"[{r.timestamp.total_seconds():>12.6f}] {r.text}"
+        for r in get_printk_records(prog)  # type: ignore[union-attr]
     ]
     output = "\n".join(lines)
 
@@ -106,9 +106,7 @@ def search_memory(
     try:
         match search_type:
             case "bytes":
-                for addr in prog.search_memory(
-                    pattern.encode(), alignment=alignment
-                ):
+                for addr in prog.search_memory(pattern.encode(), alignment=alignment):
                     if count >= limit:
                         break
                     lines.append(f"{addr:#x}")
@@ -122,18 +120,13 @@ def search_memory(
                     lines.append(f"{addr:#x}: {found:#x}")
                     count += 1
             case "regex":
-                for addr, match_bytes in prog.search_memory_regex(
-                    pattern.encode()
-                ):
+                for addr, match_bytes in prog.search_memory_regex(pattern.encode()):
                     if count >= limit:
                         break
                     lines.append(f"{addr:#x}: {match_bytes!r}")
                     count += 1
             case _:
-                return (
-                    f"Unknown search type '{search_type}'. "
-                    "Use: bytes, u32, u64, word, regex."
-                )
+                return f"Unknown search type '{search_type}'. Use: bytes, u32, u64, word, regex."
     except drgn.FaultError as e:
         return f"Memory fault during search: {e}"
     except ValueError as e:
@@ -222,7 +215,10 @@ def read_typed_memory(
             case "u8" | "u16" | "u32" | "u64" | "word":
                 read_fn = getattr(prog, f"read_{value_type}")
                 type_sizes: dict[str, int] = {
-                    "u8": 1, "u16": 2, "u32": 4, "u64": 8,
+                    "u8": 1,
+                    "u16": 2,
+                    "u32": 4,
+                    "u64": 8,
                     "word": prog.address_size(),
                 }
                 size = type_sizes[value_type]
@@ -234,10 +230,7 @@ def read_typed_memory(
                     lines.append(f"{addr + i * size:#018x}: {value:#x}")
                 return "\n".join(lines)
             case _:
-                return (
-                    f"Unknown type '{value_type}'. "
-                    "Use: u8, u16, u32, u64, word, c_string."
-                )
+                return f"Unknown type '{value_type}'. Use: u8, u16, u32, u64, word, c_string."
     except drgn.FaultError as e:
         return f"Memory fault at {addr:#x}: {e}"
 
@@ -432,8 +425,7 @@ def get_slab_info(cache_name: str = "") -> str:
         try:
             usage = slab_cache_usage(cache)
             lines.append(
-                f"{name}: {usage.num_objs} objs, "
-                f"{usage.free_objs} free, {usage.num_slabs} slabs"
+                f"{name}: {usage.num_objs} objs, {usage.free_objs} free, {usage.num_slabs} slabs"
             )
         except drgn.FaultError:
             lines.append(f"{name}: <error reading usage>")
@@ -648,10 +640,6 @@ def read_process_memory(
     for offset in range(0, len(data), 16):
         chunk = data[offset : offset + 16]
         hex_part = " ".join(f"{b:02x}" for b in chunk)
-        ascii_part = "".join(
-            chr(b) if 32 <= b < 127 else "." for b in chunk
-        )
-        lines.append(
-            f"{addr + offset:#018x}  {hex_part:<48s}  {ascii_part}"
-        )
+        ascii_part = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
+        lines.append(f"{addr + offset:#018x}  {hex_part:<48s}  {ascii_part}")
     return "\n".join(lines)
