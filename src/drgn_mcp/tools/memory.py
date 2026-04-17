@@ -504,3 +504,93 @@ def get_vma_info(
         count += 1
 
     return "\n".join(lines) if lines else "No VMAs found"
+
+
+@mcp.tool()
+def get_memory_summary() -> str:
+    """Get a system-wide memory summary similar to /proc/meminfo.
+
+    Use this to understand the overall memory state at crash time,
+    including total RAM, committed memory, and commit limit.
+
+    Returns:
+        A multi-line string showing total RAM pages, committed memory,
+        and the commit limit.
+
+    Examples:
+        get_memory_summary()
+    """
+    prog = state.require_loaded()
+    from drgn.helpers.linux.mm import (
+        totalram_pages,
+        vm_commit_limit,
+        vm_memory_committed,
+    )
+
+    try:
+        total = totalram_pages(prog)
+        committed = vm_memory_committed(prog)
+        limit = vm_commit_limit(prog)
+    except drgn.FaultError as e:
+        return f"Memory fault reading memory stats: {e}"
+
+    page_size = prog["PAGE_SIZE"].value_()
+    total_mb = (total * page_size) // (1024 * 1024)
+    committed_mb = (committed * page_size) // (1024 * 1024)
+    limit_mb = (limit * page_size) // (1024 * 1024)
+
+    return (
+        f"Total RAM: {total} pages ({total_mb} MB)\n"
+        f"Committed: {committed} pages ({committed_mb} MB)\n"
+        f"Commit limit: {limit} pages ({limit_mb} MB)"
+    )
+
+
+@mcp.tool()
+def get_task_memory(pid: int) -> str:
+    """Get memory usage statistics for a specific task.
+
+    Shows the task's resident set size (RSS) and virtual memory size,
+    useful for identifying memory-heavy processes or diagnosing OOM kills.
+
+    Args:
+        pid: The PID of the task to inspect.
+
+    Returns:
+        A multi-line string showing RSS and virtual size in pages and MB.
+        Returns an error if the task is not found or is a kernel thread.
+
+    Examples:
+        get_task_memory(1)
+        get_task_memory(1234)
+    """
+    prog = state.require_loaded()
+    from drgn.helpers.linux.mm import task_rss, task_vsize
+    from drgn.helpers.linux.pid import find_task as _find_task
+
+    task = _find_task(prog, pid)
+    if task is None:
+        return f"No task found with PID {pid}"
+
+    mm = task.mm.read_()
+    if not mm:
+        return f"Task {pid} is a kernel thread (no mm_struct)"
+
+    try:
+        rss = task_rss(prog, task)
+        vsize = task_vsize(task)
+    except drgn.FaultError as e:
+        return f"Memory fault reading memory stats for PID {pid}: {e}"
+
+    page_size = prog["PAGE_SIZE"].value_()
+    rss_pages = rss.total
+    rss_mb = (rss_pages * page_size) // (1024 * 1024)
+    vsize_mb = vsize // (1024 * 1024)
+
+    return (
+        f"PID {pid} memory:\n"
+        f"RSS: {rss_pages} pages ({rss_mb} MB)"
+        f" [file={rss.file}, anon={rss.anon},"
+        f" shmem={rss.shmem}, swap={rss.swap}]\n"
+        f"Virtual size: {vsize} bytes ({vsize_mb} MB)"
+    )
