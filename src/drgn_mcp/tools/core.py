@@ -38,12 +38,23 @@ def eval_expression(expression: str) -> str:
 
     Use this as a catch-all for complex queries not covered by specialized tools.
     Prefer using specialized tools (like get_thread, lookup_symbol) first.
+    Use list_helpers to discover available functions in the eval context.
 
     The expression runs in a context with these pre-loaded:
     - prog: the loaded drgn.Program
     - All drgn module attributes (cast, sizeof, container_of, etc.)
-    - All drgn.helpers.common helpers
-    - All drgn.helpers.linux helpers (if kernel program)
+    - All drgn.helpers.common helpers (print_annotated_stack, identify_address, etc.)
+    - All drgn.helpers.linux helpers (for_each_task, list_for_each_entry, etc.)
+
+    Commonly useful helpers available in the eval context:
+    - Memory: access_process_vm, cmdline, follow_page, virt_to_phys
+    - Networking: for_each_netdev, sk_fullsock, skb_shinfo, netdev_priv
+    - Filesystem: d_path, fget, inode_path, path_lookup
+    - Scheduler: cpu_curr, idle_task, loadavg, task_rq
+    - Signals: decode_sigset, sigpending_for_each
+    - Data structures: list_for_each_entry, rbtree_inorder_for_each_entry,
+      xa_for_each, idr_for_each_entry, hlist_for_each_entry
+    - Types: cast, sizeof, container_of, offsetof, alignof
 
     Args:
         expression: Python code to evaluate. Tries Python's eval() builtin first,
@@ -90,6 +101,58 @@ def eval_expression(expression: str) -> str:
         output = output[:max_len] + f"\n... (truncated, {len(output)} total chars)"
 
     return output
+
+
+@mcp.tool()
+def list_helpers(module: str = "") -> str:
+    """List all drgn helper functions available in the eval_expression context.
+
+    Use this to discover what functions are available before writing
+    eval_expression calls. Shows functions grouped by module with their
+    names.
+
+    Args:
+        module: Optional module filter. If provided, only show helpers from
+            that module (e.g., "mm", "net", "sched", "list"). If empty,
+            lists all available modules and their function counts.
+
+    Returns:
+        If module is empty: a summary of all helper modules with function
+        counts.
+        If module is provided: all exported function names from that module.
+
+    Examples:
+        list_helpers()
+        list_helpers("mm")
+        list_helpers("sched")
+    """
+    state.require_loaded()
+    import importlib
+    import pkgutil
+
+    import drgn.helpers.linux
+
+    modules = {}
+    for mod_info in pkgutil.iter_modules(
+        drgn.helpers.linux.__path__,
+        prefix="drgn.helpers.linux.",
+    ):
+        mod = importlib.import_module(mod_info.name)
+        all_names = getattr(mod, "__all__", [])
+        short_name = mod_info.name.rsplit(".", 1)[-1]
+        modules[short_name] = sorted(all_names)
+
+    if module:
+        if module not in modules:
+            available = ", ".join(sorted(modules.keys()))
+            return f"Unknown module '{module}'. Available: {available}"
+        names = modules[module]
+        return f"{module} ({len(names)} functions):\n" + "\n".join(names)
+
+    lines = []
+    for name in sorted(modules.keys()):
+        lines.append(f"{name}: {len(modules[name])} functions")
+    return "\n".join(lines)
 
 
 @mcp.tool()
