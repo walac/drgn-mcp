@@ -1,0 +1,18 @@
+{
+  "name": "drgn-mcp",
+  "version": "0.1.0",
+  "description": "Linux kernel crash dump debugger via drgn",
+  "author": {
+    "name": "Wander Lairson Costa",
+    "email": "wander@redhat.com"
+  },
+  "repository": "https://github.com/walac/drgn-mcp",
+  "license": "LGPL-2.1-or-later",
+  "keywords": ["drgn", "kernel", "debugger", "crash-dump", "vmcore", "linux"],
+  "mcpServers": {
+    "drgn": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/walac/drgn-mcp", "drgn-mcp"]
+    }
+  }
+}
