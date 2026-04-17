@@ -596,3 +596,62 @@ def get_task_memory(pid: int) -> str:
         f" shmem={rss.shmem}, swap={rss.swap}]\n"
         f"Virtual size: {vsize} bytes ({vsize_mb} MB)"
     )
+
+
+@mcp.tool()
+def read_process_memory(
+    pid: int,
+    address: int | str,
+    size: int = 64,
+) -> str:
+    """Read memory from a specific process's virtual address space.
+
+    DIFFERENCE FROM read_memory: read_memory reads kernel virtual addresses.
+    read_process_memory reads userspace addresses within a specific task's
+    address space, translating through the task's page tables.
+
+    Args:
+        pid: The PID of the task whose memory to read.
+        address: The userspace virtual address to read from.
+        size: Number of bytes to read. Maximum is 4096 bytes.
+
+    Returns:
+        A hex dump of the process memory, identical in format to read_memory.
+        Returns an error if the task is not found, is a kernel thread, or
+        the address is invalid in the task's address space.
+
+    Examples:
+        read_process_memory(1234, 0x7f0000000000, size=128)
+        read_process_memory(1, "0x400000")
+    """
+    prog = state.require_loaded()
+    from drgn.helpers.linux.mm import access_process_vm
+    from drgn.helpers.linux.pid import find_task as _find_task
+
+    task = _find_task(prog, pid)
+    if task is None:
+        return f"No task found with PID {pid}"
+
+    mm = task.mm.read_()
+    if not mm:
+        return f"Task {pid} is a kernel thread (no address space)"
+
+    addr = address if isinstance(address, int) else int(address, 0)
+    size = min(size, 4096)
+
+    try:
+        data = access_process_vm(task, addr, size)
+    except drgn.FaultError as e:
+        return f"Memory fault at {addr:#x} in task {pid}: {e}"
+
+    lines = []
+    for offset in range(0, len(data), 16):
+        chunk = data[offset : offset + 16]
+        hex_part = " ".join(f"{b:02x}" for b in chunk)
+        ascii_part = "".join(
+            chr(b) if 32 <= b < 127 else "." for b in chunk
+        )
+        lines.append(
+            f"{addr + offset:#018x}  {hex_part:<48s}  {ascii_part}"
+        )
+    return "\n".join(lines)
