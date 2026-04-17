@@ -51,8 +51,8 @@ def get_dmesg() -> str:
     from drgn.helpers.linux.printk import get_printk_records
 
     lines = [
-        f"[{r.timestamp.total_seconds():>12.6f}] {r.text}"
-        for r in get_printk_records(prog)  # type: ignore[union-attr]
+        f"[{r.timestamp.total_seconds():>12.6f}] {r.text}"  # type: ignore[union-attr]
+        for r in get_printk_records(prog)
     ]
     output = "\n".join(lines)
 
