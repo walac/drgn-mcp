@@ -77,6 +77,7 @@ A typical workflow when debugging a kernel crash dump:
 |--------------------|--------------------------------------------------|
 | load_core_dump     | Load vmcore + optional vmlinux                   |
 | eval_expression    | Evaluate arbitrary drgn Python expressions       |
+| list_helpers       | Discover available drgn helper functions         |
 | get_program_info   | Show program flags, platform, type               |
 | get_crashed_thread | Get crashed thread + stack trace                 |
 | get_stack_trace    | Get stack trace by thread ID                     |
@@ -96,6 +97,9 @@ A typical workflow when debugging a kernel crash dump:
 | get_page_info      | Inspect page flags, compound, slab membership    |
 | get_slab_info      | Slab cache usage statistics                      |
 | get_vma_info       | Inspect virtual memory areas for a task          |
+| get_memory_summary | System-wide RAM, committed memory, commit limit  |
+| get_task_memory    | Per-task RSS and virtual size                    |
+| read_process_memory| Read userspace memory via task page tables       |
 | get_dmesg          | Get kernel log buffer                            |
 | get_panic_info     | Get panic message + crashed thread trace         |
 | traverse_list      | Traverse kernel linked lists (list/hlist)        |
@@ -107,9 +111,21 @@ A typical workflow when debugging a kernel crash dump:
 | list_files         | List open files for a process                    |
 | get_lock_info      | Inspect mutex/rwsem lock state                   |
 | list_irqs          | List IRQ descriptors with handlers               |
-| list_bpf           | List BPF programs, maps, or links                |
+| list_bpf           | List BPF programs, maps, links, or BTF objects   |
+| get_bpf_prog       | Look up a BPF program by ID                      |
+| get_bpf_map        | Look up a BPF map by ID                          |
+| get_bpf_prog_maps  | List maps used by a BPF program                  |
+| get_cgroup_bpf     | List BPF programs attached to a cgroup           |
 | get_cpu_info       | CPU topology and online/offline state            |
 | get_kconfig        | Kernel build configuration                       |
+| get_cmdline        | Get process command line arguments               |
+| get_environ        | Get process environment variables                |
+| list_timers        | List timer wheel and hrtimer entries             |
+| get_cgroup         | Look up a cgroup by path                         |
+| list_cgroups       | Traverse the cgroup tree                         |
+| get_running_tasks  | Show task running on each CPU                    |
+| get_runqueue       | Inspect CPU runqueue (CFS + RT tasks)            |
+| get_loadavg        | System load averages (1/5/15 min)                |
 | identify_address   | Classify what a memory address refers to         |
 | annotated_stack    | Stack trace with annotated memory values         |
 | read_percpu        | Read per-CPU variables                           |
