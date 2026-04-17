@@ -650,3 +650,124 @@ def list_cgroups(path: str = "/", limit: int = 100) -> str:
         lines.append(f"... Traversal aborted due to memory fault: {e}")
 
     return "\n".join(lines) if lines else "No cgroups found"
+
+
+@mcp.tool()
+def get_running_tasks() -> str:
+    """Show the task running on each online CPU at crash time.
+
+    Use this to quickly see what every CPU was doing when the system
+    crashed. Shows the currently scheduled task per CPU with its PID,
+    command name, and state.
+
+    Returns:
+        A multi-line table showing CPU number, PID, comm (name), and
+        task state for the task that was running on each online CPU.
+
+    Examples:
+        get_running_tasks()
+    """
+    prog = state.require_loaded()
+    from drgn.helpers.linux.cpumask import for_each_online_cpu
+    from drgn.helpers.linux.sched import cpu_curr, task_state_to_char
+
+    lines = []
+    for cpu in for_each_online_cpu(prog):
+        try:
+            task = cpu_curr(prog, cpu)
+            pid = task.pid.value_()
+            comm = task.comm.string_().decode(errors="replace")
+            state_char = task_state_to_char(task)
+            lines.append(
+                f"cpu={cpu} pid={pid} comm={comm} state={state_char}"
+            )
+        except drgn.FaultError as e:
+            lines.append(f"cpu={cpu}: <fault: {e}>")
+
+    return "\n".join(lines) if lines else "No online CPUs found"
+
+
+@mcp.tool()
+def get_runqueue(cpu: int) -> str:
+    """Inspect the runqueue for a specific CPU.
+
+    Shows all runnable tasks on the given CPU's runqueue, separated by
+    scheduling class (CFS/EEVDF fair tasks and RT realtime tasks).
+
+    Args:
+        cpu: The CPU number whose runqueue to inspect.
+
+    Returns:
+        A multi-line string listing runnable tasks grouped by scheduling
+        class, showing PID and comm for each. Shows task counts per class.
+
+    Examples:
+        get_runqueue(0)
+        get_runqueue(3)
+    """
+    prog = state.require_loaded()
+    from drgn.helpers.linux.sched import (
+        cpu_rq,
+        rq_for_each_fair_task,
+        rq_for_each_rt_task,
+        task_state_to_char,
+    )
+
+    try:
+        rq = cpu_rq(prog, cpu)
+    except drgn.FaultError as e:
+        return f"Cannot access runqueue for CPU {cpu}: {e}"
+
+    lines = [f"Runqueue for CPU {cpu}:"]
+
+    fair_tasks = []
+    fair_count = 0
+    try:
+        for task in rq_for_each_fair_task(rq):
+            pid = task.pid.value_()
+            comm = task.comm.string_().decode(errors="replace")
+            state_char = task_state_to_char(task)
+            fair_tasks.append(f"  pid={pid} comm={comm} state={state_char}")
+            fair_count += 1
+    except drgn.FaultError as e:
+        fair_tasks.append(f"  <fault: {e}>")
+
+    lines.append(f"Fair tasks ({fair_count}):")
+    lines.extend(fair_tasks)
+
+    rt_tasks = []
+    rt_count = 0
+    try:
+        for task in rq_for_each_rt_task(rq):
+            pid = task.pid.value_()
+            comm = task.comm.string_().decode(errors="replace")
+            state_char = task_state_to_char(task)
+            rt_tasks.append(f"  pid={pid} comm={comm} state={state_char}")
+            rt_count += 1
+    except drgn.FaultError as e:
+        rt_tasks.append(f"  <fault: {e}>")
+
+    lines.append(f"RT tasks ({rt_count}):")
+    lines.extend(rt_tasks)
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def get_loadavg() -> str:
+    """Get the system load averages at crash time.
+
+    Returns the 1, 5, and 15 minute load averages, similar to the
+    output of the uptime command or /proc/loadavg.
+
+    Returns:
+        A string showing the three load average values.
+
+    Examples:
+        get_loadavg()
+    """
+    prog = state.require_loaded()
+    from drgn.helpers.linux.sched import loadavg
+
+    avg1, avg5, avg15 = loadavg(prog)
+    return f"Load average: {avg1:.2f}, {avg5:.2f}, {avg15:.2f}"
