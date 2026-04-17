@@ -448,3 +448,105 @@ def get_environ(pid: int) -> str:
     if len(output) > max_len:
         output = output[:max_len] + f"\n... (truncated, {len(output)} total chars)"
     return output
+
+
+@mcp.tool()
+def list_timers(timer_type: str = "wheel", limit: int = 100) -> str:
+    """List active kernel timers (timer wheel or high-resolution timers).
+
+    Use this to inspect pending timer callbacks at crash time. Shows the
+    timer callback function and expiration for each active timer across
+    all online CPUs.
+
+    Args:
+        timer_type: Type of timers to list. Must be one of:
+            - "wheel": standard timer wheel timers (default)
+            - "hrtimer": high-resolution timers
+        limit: Maximum number of timers to return.
+
+    Returns:
+        A multi-line string listing active timers with their CPU, base
+        name, callback function, and expiration. Returns an error for
+        unknown timer types.
+
+    Examples:
+        list_timers()
+        list_timers("hrtimer")
+    """
+    prog = state.require_loaded()
+    from drgn.helpers.linux.cpumask import for_each_online_cpu
+    from drgn.helpers.linux.percpu import per_cpu
+
+    lines = []
+    count = 0
+
+    match timer_type:
+        case "wheel":
+            from drgn.helpers.linux.timer import (
+                timer_base_for_each,
+                timer_base_names,
+            )
+
+            base_names = timer_base_names(prog)
+            for cpu in for_each_online_cpu(prog):
+                bases = per_cpu(prog["timer_bases"], cpu)
+                for i, name in enumerate(base_names):
+                    try:
+                        for timer in timer_base_for_each(
+                            bases[i].address_of_()
+                        ):
+                            if count >= limit:
+                                lines.append(
+                                    f"... (limited to {limit} timers)"
+                                )
+                                return "\n".join(lines)
+                            fn = timer.function
+                            expires = timer.expires.value_()
+                            lines.append(
+                                f"cpu={cpu} base={name} "
+                                f"fn={fn} expires={expires}"
+                            )
+                            count += 1
+                    except drgn.FaultError as e:
+                        lines.append(
+                            f"cpu={cpu} base={name}: <fault: {e}>"
+                        )
+        case "hrtimer":
+            from drgn.helpers.linux.timer import (
+                hrtimer_clock_base_for_each,
+            )
+
+            for cpu in for_each_online_cpu(prog):
+                try:
+                    cpu_base = per_cpu(prog["hrtimer_bases"], cpu)
+                except drgn.FaultError as e:
+                    lines.append(f"cpu={cpu}: <fault: {e}>")
+                    continue
+                for idx, clock_base in enumerate(cpu_base.clock_base):
+                    try:
+                        for hrt in hrtimer_clock_base_for_each(
+                            clock_base.address_of_()
+                        ):
+                            if count >= limit:
+                                lines.append(
+                                    f"... (limited to {limit} timers)"
+                                )
+                                return "\n".join(lines)
+                            fn = hrt.function
+                            softexpires = hrt._softexpires.value_()
+                            lines.append(
+                                f"cpu={cpu} clock_base={idx} "
+                                f"fn={fn} softexpires={softexpires}"
+                            )
+                            count += 1
+                    except drgn.FaultError as e:
+                        lines.append(
+                            f"cpu={cpu} clock_base={idx}: <fault: {e}>"
+                        )
+        case _:
+            return (
+                f"Unknown timer type '{timer_type}'. "
+                "Use: wheel, hrtimer."
+            )
+
+    return "\n".join(lines) if lines else f"No {timer_type} timers found"
