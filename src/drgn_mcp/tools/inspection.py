@@ -244,7 +244,8 @@ def list_tasks(limit: int = 100) -> str:
         character. Appends a truncation notice if tasks exceed limit.
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.sched import for_each_task, task_state_to_char
+    from drgn.helpers.linux.pid import for_each_task
+    from drgn.helpers.linux.sched import task_state_to_char
 
     lines = []
     count = 0

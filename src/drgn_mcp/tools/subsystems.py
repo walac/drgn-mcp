@@ -32,7 +32,7 @@ def list_netdevs(limit: int = 100) -> str:
 
     lines = []
     count = 0
-    for dev in for_each_netdev(prog, None):
+    for dev in for_each_netdev(prog, None):  # type: ignore[call-overload]
         if count >= limit:
             lines.append(f"... (limited to {limit} devices)")
             break
@@ -74,7 +74,7 @@ def list_mounts(limit: int = 200) -> str:
 
     lines = []
     count = 0
-    for mnt in for_each_mount(prog, None):
+    for mnt in for_each_mount(prog, None):  # type: ignore[call-overload]
         if count >= limit:
             lines.append(f"... (limited to {limit} mounts)")
             break

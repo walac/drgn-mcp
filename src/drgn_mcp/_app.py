@@ -1,3 +1,5 @@
+from typing import Any
+
 from mcp.server.fastmcp import FastMCP
 
 from drgn_mcp.state import state
@@ -26,7 +28,7 @@ mcp = FastMCP(
 )
 
 
-def _eval_expr(expr: str) -> object:
+def _eval_expr(expr: str) -> Any:
     """Evaluate a drgn Python expression and return the resulting object.
 
     Internal helper used by tools to resolve string expressions into drgn

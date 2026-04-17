@@ -51,7 +51,7 @@ def get_dmesg() -> str:
     from drgn.helpers.linux.printk import get_printk_records
 
     lines = [
-        f"[{r.timestamp.total_seconds():>12.6f}] {r.text}"
+        f"[{r.timestamp.total_seconds():>12.6f}] {r.text}"  # type: ignore[union-attr]
         for r in get_printk_records(prog)
     ]
     output = "\n".join(lines)
@@ -294,9 +294,11 @@ def translate_address(
             case "virt_to_page":
                 result = virt_to_page(prog, addr)
             case "page_to_virt":
-                result = page_to_virt(prog.object("struct page *", addr))
+                page = drgn.Object(prog, "struct page *", value=addr)
+                result = page_to_virt(page)
             case "page_to_pfn":
-                result = page_to_pfn(prog.object("struct page *", addr))
+                page = drgn.Object(prog, "struct page *", value=addr)
+                result = page_to_pfn(page)
             case "pfn_to_page":
                 result = pfn_to_page(prog, addr)
             case "virt_to_pfn":
