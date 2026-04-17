@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: pip install ruff pyright black
+
+      - name: Check formatting (black)
+        run: black -l 100 -t py312 --check src/
+
+      - name: Lint (ruff)
+        run: ruff check src/
+
+      - name: Type check (pyright)
+        run: pyright --pythonversion 3.12 src/
+        env:
+          PYRIGHT_PYTHON_FORCE_VERSION: latest
