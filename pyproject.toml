@@ -9,6 +9,9 @@ dependencies = [
     "mcp[cli]",
 ]
 
+[dependency-groups]
+dev = ["pyright", "ruff", "black"]
+
 [project.scripts]
 drgn-mcp = "drgn_mcp.server:main"
 

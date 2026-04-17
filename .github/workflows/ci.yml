@@ -11,20 +11,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
-          python-version: "3.12"
+          enable-cache: true
 
-      - name: Install tools
-        run: pip install ruff pyright black
+      - name: Install dependencies
+        run: uv sync
 
       - name: Check formatting (black)
-        run: black -l 100 -t py312 --check src/
+        run: uv run black -l 100 -t py312 --check src/
 
       - name: Lint (ruff)
-        run: ruff check src/
+        run: uv run ruff check src/
 
       - name: Type check (pyright)
-        run: pyright --pythonversion 3.12 src/
-        env:
-          PYRIGHT_PYTHON_FORCE_VERSION: latest
+        run: uv run pyright --pythonversion 3.12 src/
