@@ -40,6 +40,37 @@ transport only. Do not expose it over network transports without
 authentication — any connected client has full host access through the
 Python interpreter.
 
+## Example Session
+
+A typical workflow when debugging a kernel crash dump:
+
+**1. Load the crash dump**
+> Load the vmcore at /var/crash/vmcore using the vmlinux at
+> /usr/lib/debug/boot/vmlinux-6.1.0
+
+**2. Get basic crash info**
+> Why did the kernel panic? Show me the panic message and the crashed
+> thread.
+
+**3. Inspect the stack**
+> Give me the annotated stack trace for the crashed thread and show
+> the exact source code line where the fault occurred.
+
+**4. Check system state**
+> Are there any other tasks stuck in uninterruptible sleep (D state)?
+
+**5. Deep dive into memory**
+> Inspect the VMAs for the crashed task. Does the faulting address
+> belong to a valid mapping?
+
+**6. Check locks and allocator state**
+> Check the slab stats for kmalloc-512 and see if the crashed thread
+> was holding any mutexes.
+
+**7. Traverse kernel data structures**
+> Walk the children list of init_task and show me the PID and comm
+> for each child process.
+
 ## Tools
 
 | Tool               | Description                                      |
