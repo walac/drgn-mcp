@@ -249,6 +249,7 @@ def list_bpf(bpf_type: str = "progs", limit: int = 100) -> str:
             - "progs": BPF programs (default)
             - "maps": BPF maps
             - "links": BPF links
+            - "btf": BTF (BPF Type Format) objects
         limit: Maximum number of entries to return.
 
     Returns:
@@ -259,9 +260,11 @@ def list_bpf(bpf_type: str = "progs", limit: int = 100) -> str:
         list_bpf()
         list_bpf("maps")
         list_bpf("links")
+        list_bpf("btf")
     """
     prog = state.require_loaded()
     from drgn.helpers.linux.bpf import (
+        bpf_btf_for_each,
         bpf_link_for_each,
         bpf_map_for_each,
         bpf_prog_for_each,
@@ -299,8 +302,23 @@ def list_bpf(bpf_type: str = "progs", limit: int = 100) -> str:
                 link_type = bpf_link.type.value_()
                 lines.append(f"link id={link_id} type={link_type}")
                 count += 1
+        case "btf":
+            try:
+                for btf in bpf_btf_for_each(prog):
+                    if count >= limit:
+                        lines.append(f"... (limited to {limit} BTF objects)")
+                        break
+                    try:
+                        btf_id = btf.id.value_()
+                        name = btf.name.string_().decode(errors="replace") if btf.name else ""
+                        lines.append(f"btf id={btf_id} name={name}")
+                    except drgn.FaultError as e:
+                        lines.append(f"btf <fault: {e}>")
+                    count += 1
+            except drgn.FaultError as e:
+                lines.append(f"... Traversal aborted due to memory fault: {e}")
         case _:
-            return f"Unknown BPF type '{bpf_type}'. Use: progs, maps, links."
+            return f"Unknown BPF type '{bpf_type}'. Use: progs, maps, links, btf."
 
     return "\n".join(lines) if lines else f"No BPF {bpf_type} found"
 
@@ -878,3 +896,79 @@ def get_bpf_prog_maps(prog_id: int, limit: int = 100) -> str:
         lines.append(f"... Traversal aborted due to memory fault: {e}")
 
     return "\n".join(lines) if lines else f"No maps used by BPF program {prog_id}"
+
+
+@mcp.tool()
+def get_cgroup_bpf(
+    path: str = "/",
+    attach_type: int = 0,
+    effective: bool = False,
+    limit: int = 100,
+) -> str:
+    """List BPF programs attached to a cgroup.
+
+    Use this to see which BPF programs are attached to a specific cgroup,
+    optionally filtering by attach type. Can show either directly attached
+    or effective (inherited) programs.
+
+    Args:
+        path: The cgroup path in the default hierarchy (e.g., "/",
+            "/system.slice"). Defaults to root.
+        attach_type: The BPF attach type number (enum bpf_attach_type).
+            Defaults to 0 (BPF_CGROUP_INET_INGRESS).
+        effective: If True, show effective programs (including inherited
+            from parent cgroups). If False, show only directly attached.
+        limit: Maximum number of programs to return.
+
+    Returns:
+        A multi-line string listing BPF programs attached to the cgroup.
+        Returns an error if the cgroup path is not found.
+
+    Examples:
+        get_cgroup_bpf("/")
+        get_cgroup_bpf("/system.slice", attach_type=2, effective=True)
+    """
+    prog = state.require_loaded()
+    from drgn.helpers.linux.bpf import (
+        cgroup_bpf_prog_for_each,
+        cgroup_bpf_prog_for_each_effective,
+    )
+    from drgn.helpers.linux.cgroup import cgroup_get_from_path
+
+    try:
+        cgrp = cgroup_get_from_path(prog, path)
+    except (drgn.FaultError, LookupError) as e:
+        return f"Error looking up cgroup '{path}': {e}"
+
+    if not cgrp:
+        return f"No cgroup found at path '{path}'"
+
+    iterator = (
+        cgroup_bpf_prog_for_each_effective(cgrp, attach_type)
+        if effective
+        else cgroup_bpf_prog_for_each(cgrp, attach_type)
+    )
+
+    lines = []
+    count = 0
+    try:
+        for bpf_prog in iterator:
+            if count >= limit:
+                lines.append(f"... (limited to {limit} programs)")
+                break
+            try:
+                prog_id = bpf_prog.aux.id.value_()
+                prog_type = bpf_prog.type.value_()
+                lines.append(f"prog id={prog_id} type={prog_type}")
+            except drgn.FaultError as e:
+                lines.append(f"prog <fault: {e}>")
+            count += 1
+    except drgn.FaultError as e:
+        lines.append(f"... Traversal aborted due to memory fault: {e}")
+
+    mode = "effective" if effective else "attached"
+    return (
+        "\n".join(lines)
+        if lines
+        else f"No {mode} BPF programs on cgroup '{path}' for attach type {attach_type}"
+    )
