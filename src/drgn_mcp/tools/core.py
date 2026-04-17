@@ -1,7 +1,8 @@
 import contextlib
 import inspect
 import io
-import traceback
+import signal
+import types
 
 from drgn_mcp._app import mcp
 from drgn_mcp.state import state
@@ -33,8 +34,84 @@ def load_core_dump(
     return state.load(core_path, vmlinux_path or None, extra_symbols or None)
 
 
+_STDOUT_LIMIT = 16384
+
+
+class _BoundedStringIO(io.StringIO):
+    def write(self, s: str) -> int:
+        if self.tell() >= _STDOUT_LIMIT:
+            return len(s)
+        return super().write(s[: _STDOUT_LIMIT - self.tell()])
+
+
+class _EvalTimeout(BaseException):
+    pass
+
+
+def _timeout_handler(signum: int, frame: types.FrameType | None) -> None:
+    raise _EvalTimeout
+
+
+def _format_eval_error(exc: BaseException, expression: str, partial_output: str) -> str:
+    import drgn
+
+    error_type = type(exc).__name__
+    error_msg = str(exc)
+
+    match exc:
+        case _EvalTimeout():
+            error_type = "TimeoutError"
+            error_msg = "Expression exceeded the execution time limit."
+            hint = (
+                "The expression likely hit an infinite loop or is traversing a very large "
+                "data structure. Try adding a limit to your iteration (e.g., "
+                "itertools.islice) or increase the timeout parameter."
+            )
+        case drgn.FaultError():
+            hint = (
+                "A memory fault occurred, meaning the address is unmapped or the data "
+                "structure is corrupted. Try accessing a different field or check if the "
+                "pointer is valid with identify_address first."
+            )
+        case drgn.ObjectAbsentError():
+            hint = (
+                "The object exists in the type system but has no value "
+                "(e.g., optimized out by the compiler)."
+            )
+        case LookupError():
+            hint = (
+                "The symbol, type, or variable was not found. Check the name "
+                "spelling or use lookup_symbol to search."
+            )
+        case TypeError():
+            hint = "Type mismatch. Use list_helpers to check function signatures before calling."
+        case SyntaxError():
+            hint = "Check the expression for syntax errors (unmatched parentheses, missing colons, etc.)."
+        case NameError():
+            hint = (
+                "The name was not found in the eval context. Use list_helpers "
+                "to see available functions, or check variable spelling."
+            )
+        case _:
+            import traceback
+
+            hint = ""
+            error_msg = "".join(traceback.format_exception(exc))
+
+    parts = [f"Error ({error_type}): {error_msg}", f"Expression: {expression}"]
+    if hint:
+        parts.append(f"Hint: {hint}")
+    if partial_output:
+        max_partial = 2000
+        if len(partial_output) > max_partial:
+            partial_output = partial_output[:max_partial] + "\n... (partial output truncated)"
+        parts.append(f"Partial output before error:\n{partial_output}")
+
+    return "\n\n".join(parts)
+
+
 @mcp.tool()
-def eval_expression(expression: str) -> str:
+def eval_expression(expression: str, timeout: int = 30) -> str:
     """Evaluate a drgn Python expression or statement.
 
     Use this as a catch-all for complex queries not covered by specialized tools.
@@ -60,10 +137,13 @@ def eval_expression(expression: str) -> str:
     Args:
         expression: Python code to evaluate. Tries Python's eval() builtin first,
             falls back to the exec() builtin on SyntaxError.
+        timeout: Maximum execution time in seconds. Protects against infinite
+            loops from corrupted data structures. Set to 0 to disable.
 
     Returns:
         The captured stdout output or string representation of the result.
-        Truncated at 8KB. Returns an error message if evaluation fails.
+        Truncated at 8KB. Returns a structured error message if evaluation
+        fails, including the exception type and a hint for common drgn errors.
 
     Examples:
         eval_expression("prog.crashed_thread().stack_trace()")
@@ -73,20 +153,35 @@ def eval_expression(expression: str) -> str:
     """
     state.require_loaded()
 
-    stdout_capture = io.StringIO()
+    stdout_capture = _BoundedStringIO()
     result = None
 
+    prev_handler = signal.getsignal(signal.SIGALRM)
+    prev_alarm = 0
     try:
+        if timeout > 0:
+            signal.signal(signal.SIGALRM, _timeout_handler)
+            prev_alarm = signal.alarm(timeout)
         try:
-            code = compile(expression, "<eval>", "eval")
-            with contextlib.redirect_stdout(stdout_capture):
-                result = eval(code, state.globals)
-        except SyntaxError:
-            code = compile(expression, "<eval>", "exec")  # noqa: S102
-            with contextlib.redirect_stdout(stdout_capture):
-                exec(code, state.globals)  # noqa: S102
-    except Exception:
-        return f"Error evaluating expression:\n{traceback.format_exc()}"
+            try:
+                code = compile(expression, "<eval>", "eval")
+                with contextlib.redirect_stdout(stdout_capture):
+                    result = eval(code, state.globals)
+            except SyntaxError:
+                code = compile(expression, "<eval>", "exec")  # noqa: S102
+                with contextlib.redirect_stdout(stdout_capture):
+                    exec(code, state.globals)  # noqa: S102
+        finally:
+            if timeout > 0:
+                signal.alarm(0)
+    except (Exception, _EvalTimeout) as exc:
+        partial = stdout_capture.getvalue()
+        return _format_eval_error(exc, expression, partial)
+    finally:
+        if timeout > 0:
+            signal.signal(signal.SIGALRM, prev_handler)
+            if prev_alarm > 0:
+                signal.alarm(prev_alarm)
 
     output_parts = []
     stdout_str = stdout_capture.getvalue()
