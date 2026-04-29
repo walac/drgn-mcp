@@ -40,14 +40,18 @@ class DrgnState:
         if extra_symbols:
             symbols.extend(extra_symbols)
 
-        if symbols:
-            prog.load_debug_info(symbols, default=True, main=True)
-        else:
-            prog.load_default_debug_info()
+        missing_info = ""
+        try:
+            if symbols:
+                prog.load_debug_info(symbols, default=True, main=True)
+            else:
+                prog.load_default_debug_info()
+        except drgn.MissingDebugInfoError as e:
+            missing_info = f"\nWarning: {e}"
 
         self.prog = prog
         self._globals = drgn.cli.default_globals(prog)
-        return self.format_program_info()
+        return self.format_program_info() + missing_info
 
     def format_program_info(self) -> str:
         prog = self.require_loaded()
