@@ -50,10 +50,7 @@ def get_dmesg() -> str:
     prog = state.require_loaded()
     from drgn.helpers.linux.printk import get_printk_records
 
-    lines = [
-        f"[{r.timestamp.total_seconds():>12.6f}] {r.text}"  # type: ignore[union-attr]
-        for r in get_printk_records(prog)
-    ]
+    lines = [f"[{r.timestamp / 1_000_000_000:>12.6f}] {r.text}" for r in get_printk_records(prog)]
     output = "\n".join(lines)
 
     max_len = 8000

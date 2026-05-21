@@ -34,7 +34,7 @@ class DrgnState:
         prog = drgn.Program()
         prog.set_core_dump(core_path)
 
-        symbols = []
+        symbols: list[str] = []
         if vmlinux_path:
             symbols.append(vmlinux_path)
         if extra_symbols:

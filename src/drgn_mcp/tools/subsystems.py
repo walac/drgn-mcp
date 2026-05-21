@@ -32,7 +32,7 @@ def list_netdevs(limit: int = 100) -> str:
 
     lines = []
     count = 0
-    for dev in for_each_netdev(prog, None):  # type: ignore[call-overload]
+    for dev in for_each_netdev(prog, None):  # type: ignore[call-overload]  # ty: ignore[no-matching-overload]
         if count >= limit:
             lines.append(f"... (limited to {limit} devices)")
             break
@@ -74,7 +74,7 @@ def list_mounts(limit: int = 200) -> str:
 
     lines = []
     count = 0
-    for mnt in for_each_mount(prog, None):  # type: ignore[call-overload]
+    for mnt in for_each_mount(prog, None):  # type: ignore[call-overload]  # ty: ignore[no-matching-overload]
         if count >= limit:
             lines.append(f"... (limited to {limit} mounts)")
             break
@@ -186,7 +186,7 @@ def get_lock_info(lock_expr: str) -> str:
         if "rw_semaphore" in type_name:
             locked = rwsem_locked(lock_obj)
             owner = rwsem_owner(lock_obj)
-            lines = [f"RW semaphore: {locked.name}"]
+            lines: list[str] = [f"RW semaphore: {locked.name}"]
             if owner and owner.value_():
                 pid = owner.pid.value_()
                 comm = owner.comm.string_().decode(errors="replace")
