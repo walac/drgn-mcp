@@ -1,4 +1,34 @@
 import drgn
+from drgn.helpers.linux.mm import (
+    PageCompound,
+    PageSlab,
+    access_process_vm,
+    compound_order,
+    decode_page_flags,
+    for_each_vma,
+    page_to_pfn,
+    page_to_virt,
+    pfn_to_page,
+    phys_to_virt,
+    task_rss,
+    task_vsize,
+    totalram_pages,
+    virt_to_page,
+    virt_to_pfn,
+    virt_to_phys,
+    vm_commit_limit,
+    vm_memory_committed,
+    vma_find,
+    vma_name,
+)
+from drgn.helpers.linux.pid import find_task as _find_task
+from drgn.helpers.linux.printk import get_printk_records
+from drgn.helpers.linux.slab import (
+    find_slab_cache,
+    for_each_slab_cache,
+    slab_cache_usage,
+    slab_total_usage,
+)
 
 from drgn_mcp._app import mcp
 from drgn_mcp.state import state
@@ -48,7 +78,6 @@ def get_dmesg() -> str:
         Truncates from the front at 8KB, keeping the most recent messages.
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.printk import get_printk_records
 
     lines = [f"[{r.timestamp / 1_000_000_000:>12.6f}] {r.text}" for r in get_printk_records(prog)]
     output = "\n".join(lines)
@@ -263,16 +292,6 @@ def translate_address(
         translate_address(0xffff888100000000, "virt_to_pfn")
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.mm import (
-        page_to_pfn,
-        page_to_virt,
-        pfn_to_page,
-        phys_to_virt,
-        virt_to_page,
-        virt_to_pfn,
-        virt_to_phys,
-    )
-
     addr = address if isinstance(address, int) else int(address, 0)
 
     try:
@@ -331,15 +350,6 @@ def get_page_info(
         get_page_info(256, source="pfn")
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.mm import (
-        PageCompound,
-        PageSlab,
-        compound_order,
-        decode_page_flags,
-        pfn_to_page,
-        virt_to_page,
-    )
-
     addr = address if isinstance(address, int) else int(address, 0)
 
     try:
@@ -386,12 +396,6 @@ def get_slab_info(cache_name: str = "") -> str:
         get_slab_info("task_struct")
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.slab import (
-        find_slab_cache,
-        for_each_slab_cache,
-        slab_cache_usage,
-        slab_total_usage,
-    )
 
     if cache_name:
         cache = find_slab_cache(prog, cache_name)
@@ -459,8 +463,6 @@ def get_vma_info(
         get_vma_info(1234, address=0x7f0000000000)
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.mm import for_each_vma, vma_find, vma_name
-    from drgn.helpers.linux.pid import find_task as _find_task
 
     task = _find_task(prog, pid)
     if task is None:
@@ -512,11 +514,6 @@ def get_memory_summary() -> str:
         get_memory_summary()
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.mm import (
-        totalram_pages,
-        vm_commit_limit,
-        vm_memory_committed,
-    )
 
     try:
         total = totalram_pages(prog)
@@ -556,8 +553,6 @@ def get_task_memory(pid: int) -> str:
         get_task_memory(1234)
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.mm import task_rss, task_vsize
-    from drgn.helpers.linux.pid import find_task as _find_task
 
     task = _find_task(prog, pid)
     if task is None:
@@ -614,8 +609,6 @@ def read_process_memory(
         read_process_memory(1, "0x400000")
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.mm import access_process_vm
-    from drgn.helpers.linux.pid import find_task as _find_task
 
     task = _find_task(prog, pid)
     if task is None:

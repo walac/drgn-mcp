@@ -1,6 +1,10 @@
 import drgn
+from drgn.helpers.linux.idr import idr_for_each_entry
+from drgn.helpers.linux.list import hlist_for_each_entry, list_for_each_entry
+from drgn.helpers.linux.rbtree import rbtree_inorder_for_each_entry
+from drgn.helpers.linux.xarray import xa_for_each
 
-from drgn_mcp._app import mcp, _eval_expr
+from drgn_mcp._app import _eval_expr, mcp
 from drgn_mcp.state import state
 
 
@@ -45,10 +49,6 @@ def traverse_list(
             format_expr="f'PID: {entry.pid.value_()}'")
     """
     state.require_loaded()
-    from drgn.helpers.linux.list import (
-        hlist_for_each_entry,
-        list_for_each_entry,
-    )
 
     try:
         head_obj = _eval_expr(head_expr)
@@ -132,7 +132,6 @@ def traverse_rbtree(
             format_expr="f'{entry.vm_start.value_():#x} - {entry.vm_end.value_():#x}'")
     """
     state.require_loaded()
-    from drgn.helpers.linux.rbtree import rbtree_inorder_for_each_entry
 
     try:
         root_obj = _eval_expr(root_expr)
@@ -202,7 +201,6 @@ def traverse_xarray(
             format_expr="f'index {index}: page {entry.value_():#x}'")
     """
     state.require_loaded()
-    from drgn.helpers.linux.xarray import xa_for_each
 
     try:
         xa_obj = _eval_expr(xa_expr)
@@ -281,7 +279,6 @@ def traverse_idr(
             format_expr="f'cgroup ID {id}: {entry.value_():#x}'")
     """
     state.require_loaded()
-    from drgn.helpers.linux.idr import idr_for_each_entry
 
     try:
         idr_obj = _eval_expr(idr_expr)

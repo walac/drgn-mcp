@@ -1,6 +1,7 @@
 import itertools
 
 import drgn
+from drgn.helpers.linux.panic import panic_message
 
 from drgn_mcp._app import mcp
 from drgn_mcp.state import state
@@ -315,11 +316,9 @@ def get_panic_info() -> str:
     prog = state.require_loaded()
     lines = []
     try:
-        from drgn.helpers.linux.panic import panic_message
-
         msg = panic_message(prog)
         lines.append(f"Panic message: {msg}")
-    except (drgn.FaultError, LookupError, ImportError, ValueError) as e:
+    except (drgn.FaultError, LookupError, ValueError) as e:
         lines.append(f"Could not retrieve panic message: {e}")
 
     try:

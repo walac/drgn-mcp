@@ -2,8 +2,12 @@ import contextlib
 import io
 
 import drgn
+from drgn.helpers.common.memory import identify_address as _identify_address
+from drgn.helpers.common.stack import print_annotated_stack
+from drgn.helpers.linux.cpumask import for_each_online_cpu
+from drgn.helpers.linux.percpu import per_cpu
 
-from drgn_mcp._app import mcp, _eval_expr
+from drgn_mcp._app import _eval_expr, mcp
 from drgn_mcp.state import state
 
 
@@ -29,7 +33,6 @@ def identify_address(address: int | str) -> str:
         identify_address("0xffff888100123000")
     """
     prog = state.require_loaded()
-    from drgn.helpers.common.memory import identify_address as _identify_address
 
     addr = address if isinstance(address, int) else int(address, 0)
     try:
@@ -61,7 +64,6 @@ def annotated_stack(thread_id: int) -> str:
         annotated_stack(4096)
     """
     prog = state.require_loaded()
-    from drgn.helpers.common.stack import print_annotated_stack
 
     try:
         trace = prog.stack_trace(thread_id)
@@ -107,8 +109,6 @@ def read_percpu(var_expr: str, cpu: int = -1) -> str:
         read_percpu("prog['runqueues']")
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.cpumask import for_each_online_cpu
-    from drgn.helpers.linux.percpu import per_cpu
 
     try:
         var = _eval_expr(var_expr)

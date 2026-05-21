@@ -4,28 +4,43 @@ from mcp.server.fastmcp import FastMCP
 
 from drgn_mcp.state import state
 
-mcp = FastMCP(
-    "drgn-mcp",
-    instructions=(
-        "You are connected to a drgn debugger session for Linux kernel crash dump analysis.\n"
-        "\n"
-        "drgn is a programmable debugger. Use the available tools to investigate crash dumps.\n"
-        "Start by loading a core dump with load_core_dump, then use the analysis tools.\n"
-        "For anything not covered by structured tools, use eval_expression with drgn Python\n"
-        "expressions.\n"
-        "\n"
-        "Key drgn concepts:\n"
-        "- Program: represents the debugged program (kernel crash dump)\n"
-        "- Object: represents a value in the program (variable, struct member, etc.)\n"
-        "- Type: represents a C type (struct, enum, pointer, etc.)\n"
-        "- StackTrace/StackFrame: call stack information\n"
-        "- Thread: a thread/task in the program\n"
-        "\n"
-        "Available in eval context: prog (the Program), all drgn helpers\n"
-        "(for_each_task, find_task, etc.), cast, sizeof, container_of, offsetof,\n"
-        "and all drgn.helpers.linux.* helpers."
-    ),
-)
+_INSTRUCTIONS = """
+You are connected to a drgn debugger session for Linux kernel crash
+dump analysis.
+
+Workflow: always call load_core_dump first to load a vmcore and
+optional vmlinux. Then investigate with the structured tools. Prefer
+structured tools over eval_expression — they handle errors, truncate
+output, and provide better context. Fall back to eval_expression for
+anything not covered by a dedicated tool, or when you need to combine
+multiple helpers in a single expression. Use list_helpers to discover
+available helper functions before writing eval_expression calls.
+
+Tool categories:
+- Inspection: threads, tasks, symbols, modules, stack traces
+- Memory: hex dumps, typed reads, address translation, page/slab/VMA
+- Subsystems: networking, filesystems, BPF, cgroups, scheduler, IRQs,
+  timers, kconfig
+- Traversal: linked lists, rbtrees, xarrays, IDRs (use format_expr
+  to extract specific fields instead of dumping full structs)
+- Utilities: identify_address, annotated_stack, per-CPU variables
+
+Key drgn concepts:
+- Program: the debugged kernel crash dump
+- Object: a typed value (variable, struct member, pointer)
+- Type: a C type definition (struct, enum, typedef)
+- StackTrace/StackFrame: call stack information
+- Thread: a kernel thread/task
+
+Available in eval context: prog (the Program), cast, sizeof,
+container_of, offsetof, and all drgn.helpers.linux.* helpers
+(for_each_task, list_for_each_entry, virt_to_phys, etc.).
+
+Output from all tools is truncated at 8 KB to preserve context
+window space. Use limits and filters to narrow results.
+"""
+
+mcp = FastMCP("drgn-mcp", instructions=_INSTRUCTIONS)
 
 
 def _eval_expr(expr: str) -> Any:

@@ -1,6 +1,59 @@
 import drgn
+from drgn import container_of
+from drgn.helpers.linux.bpf import (
+    bpf_btf_for_each,
+    bpf_link_for_each,
+    bpf_map_by_id,
+    bpf_map_for_each,
+    bpf_prog_by_id,
+    bpf_prog_for_each,
+    bpf_prog_used_maps,
+    cgroup_bpf_prog_for_each,
+    cgroup_bpf_prog_for_each_effective,
+)
+from drgn.helpers.linux.cgroup import (
+    cgroup_get_from_path,
+    cgroup_name,
+    cgroup_parent,
+    cgroup_path,
+    css_for_each_descendant_pre,
+)
+from drgn.helpers.linux.cpumask import for_each_online_cpu, num_online_cpus, num_possible_cpus
+from drgn.helpers.linux.fs import (
+    d_path,
+    for_each_file,
+    for_each_mount,
+    mount_dst,
+    mount_fstype,
+    mount_src,
+)
+from drgn.helpers.linux.irq import for_each_irq_desc, irq_desc_action_names, irq_desc_chip_name
+from drgn.helpers.linux.kconfig import get_kconfig as _get_kconfig
+from drgn.helpers.linux.locking import mutex_owner, rwsem_locked, rwsem_owner
+from drgn.helpers.linux.mm import cmdline, environ
+from drgn.helpers.linux.net import (
+    for_each_netdev,
+    netdev_ipv4_addrs,
+    netdev_ipv6_addrs,
+    netdev_name,
+)
+from drgn.helpers.linux.percpu import per_cpu
+from drgn.helpers.linux.pid import find_task as _find_task
+from drgn.helpers.linux.sched import (
+    cpu_curr,
+    cpu_rq,
+    loadavg,
+    rq_for_each_fair_task,
+    rq_for_each_rt_task,
+    task_state_to_char,
+)
+from drgn.helpers.linux.timer import (
+    hrtimer_clock_base_for_each,
+    timer_base_for_each,
+    timer_base_names,
+)
 
-from drgn_mcp._app import mcp, _eval_expr
+from drgn_mcp._app import _eval_expr, mcp
 from drgn_mcp.state import state
 
 
@@ -23,12 +76,6 @@ def list_netdevs(limit: int = 100) -> str:
         list_netdevs()
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.net import (
-        for_each_netdev,
-        netdev_ipv4_addrs,
-        netdev_ipv6_addrs,
-        netdev_name,
-    )
 
     lines = []
     count = 0
@@ -65,12 +112,6 @@ def list_mounts(limit: int = 200) -> str:
         list_mounts()
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.fs import (
-        for_each_mount,
-        mount_dst,
-        mount_fstype,
-        mount_src,
-    )
 
     lines = []
     count = 0
@@ -107,8 +148,6 @@ def list_files(pid: int, limit: int = 100) -> str:
         list_files(1234, limit=50)
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.fs import d_path, for_each_file
-    from drgn.helpers.linux.pid import find_task as _find_task
 
     task = _find_task(prog, pid)
     if task is None:
@@ -152,11 +191,6 @@ def get_lock_info(lock_expr: str) -> str:
         get_lock_info("find_task(prog, 1).mm.mmap_lock")
     """
     state.require_loaded()
-    from drgn.helpers.linux.locking import (
-        mutex_owner,
-        rwsem_locked,
-        rwsem_owner,
-    )
 
     try:
         lock_obj = _eval_expr(lock_expr)
@@ -216,11 +250,6 @@ def list_irqs(limit: int = 256) -> str:
         list_irqs()
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.irq import (
-        for_each_irq_desc,
-        irq_desc_action_names,
-        irq_desc_chip_name,
-    )
 
     lines = []
     count = 0
@@ -263,13 +292,6 @@ def list_bpf(bpf_type: str = "progs", limit: int = 100) -> str:
         list_bpf("btf")
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.bpf import (
-        bpf_btf_for_each,
-        bpf_link_for_each,
-        bpf_map_for_each,
-        bpf_prog_for_each,
-    )
-
     lines = []
     count = 0
 
@@ -338,12 +360,6 @@ def get_cpu_info() -> str:
         get_cpu_info()
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.cpumask import (
-        for_each_online_cpu,
-        num_online_cpus,
-        num_possible_cpus,
-    )
-
     online = num_online_cpus(prog)
     possible = num_possible_cpus(prog)
     online_cpus = list(for_each_online_cpu(prog))
@@ -373,7 +389,6 @@ def get_kconfig(key: str = "") -> str:
         get_kconfig()
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.kconfig import get_kconfig as _get_kconfig
 
     config = _get_kconfig(prog)
 
@@ -409,8 +424,6 @@ def get_cmdline(pid: int) -> str:
         get_cmdline(1234)
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.mm import cmdline
-    from drgn.helpers.linux.pid import find_task as _find_task
 
     task = _find_task(prog, pid)
     if task is None:
@@ -446,8 +459,6 @@ def get_environ(pid: int) -> str:
         get_environ(1234)
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.mm import environ
-    from drgn.helpers.linux.pid import find_task as _find_task
 
     task = _find_task(prog, pid)
     if task is None:
@@ -491,19 +502,12 @@ def list_timers(timer_type: str = "wheel", limit: int = 100) -> str:
         list_timers("hrtimer")
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.cpumask import for_each_online_cpu
-    from drgn.helpers.linux.percpu import per_cpu
 
     lines = []
     count = 0
 
     match timer_type:
         case "wheel":
-            from drgn.helpers.linux.timer import (
-                timer_base_for_each,
-                timer_base_names,
-            )
-
             base_names = timer_base_names(prog)
             for cpu in for_each_online_cpu(prog):
                 bases = per_cpu(prog["timer_bases"], cpu)
@@ -520,10 +524,6 @@ def list_timers(timer_type: str = "wheel", limit: int = 100) -> str:
                     except drgn.FaultError as e:
                         lines.append(f"cpu={cpu} base={name}: <fault: {e}>")
         case "hrtimer":
-            from drgn.helpers.linux.timer import (
-                hrtimer_clock_base_for_each,
-            )
-
             for cpu in for_each_online_cpu(prog):
                 try:
                     cpu_base = per_cpu(prog["hrtimer_bases"], cpu)
@@ -570,12 +570,6 @@ def get_cgroup(path: str = "/") -> str:
         get_cgroup("/system.slice")
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.cgroup import (
-        cgroup_get_from_path,
-        cgroup_name,
-        cgroup_parent,
-        cgroup_path,
-    )
 
     try:
         cgrp = cgroup_get_from_path(prog, path)
@@ -618,12 +612,6 @@ def list_cgroups(path: str = "/", limit: int = 100) -> str:
         list_cgroups("/system.slice", limit=50)
     """
     prog = state.require_loaded()
-    from drgn import container_of
-    from drgn.helpers.linux.cgroup import (
-        cgroup_get_from_path,
-        cgroup_path,
-        css_for_each_descendant_pre,
-    )
 
     try:
         cgrp = cgroup_get_from_path(prog, path)
@@ -666,8 +654,6 @@ def get_running_tasks() -> str:
         get_running_tasks()
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.cpumask import for_each_online_cpu
-    from drgn.helpers.linux.sched import cpu_curr, task_state_to_char
 
     lines = []
     for cpu in for_each_online_cpu(prog):
@@ -702,12 +688,6 @@ def get_runqueue(cpu: int) -> str:
         get_runqueue(3)
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.sched import (
-        cpu_rq,
-        rq_for_each_fair_task,
-        rq_for_each_rt_task,
-        task_state_to_char,
-    )
 
     try:
         rq = cpu_rq(prog, cpu)
@@ -763,8 +743,6 @@ def get_loadavg() -> str:
         get_loadavg()
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.sched import loadavg
-
     avg1, avg5, avg15 = loadavg(prog)
     return f"Load average: {avg1:.2f}, {avg5:.2f}, {avg15:.2f}"
 
@@ -787,7 +765,6 @@ def get_bpf_prog(prog_id: int) -> str:
         get_bpf_prog(42)
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.bpf import bpf_prog_by_id
 
     try:
         bpf_prog = bpf_prog_by_id(prog, prog_id)
@@ -823,7 +800,6 @@ def get_bpf_map(map_id: int) -> str:
         get_bpf_map(10)
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.bpf import bpf_map_by_id
 
     try:
         bpf_map = bpf_map_by_id(prog, map_id)
@@ -870,7 +846,6 @@ def get_bpf_prog_maps(prog_id: int, limit: int = 100) -> str:
         get_bpf_prog_maps(42)
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.bpf import bpf_prog_by_id, bpf_prog_used_maps
 
     try:
         bpf_prog = bpf_prog_by_id(prog, prog_id)
@@ -929,11 +904,6 @@ def get_cgroup_bpf(
         get_cgroup_bpf("/system.slice", attach_type=2, effective=True)
     """
     prog = state.require_loaded()
-    from drgn.helpers.linux.bpf import (
-        cgroup_bpf_prog_for_each,
-        cgroup_bpf_prog_for_each_effective,
-    )
-    from drgn.helpers.linux.cgroup import cgroup_get_from_path
 
     try:
         cgrp = cgroup_get_from_path(prog, path)

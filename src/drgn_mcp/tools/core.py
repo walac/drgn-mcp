@@ -1,8 +1,12 @@
 import contextlib
+import importlib
 import inspect
 import io
+import pkgutil
 import signal
 import types
+
+import drgn.helpers.linux
 
 from drgn_mcp._app import mcp
 from drgn_mcp.state import state
@@ -45,7 +49,11 @@ class _BoundedStringIO(io.StringIO):
 
 
 class _EvalTimeout(BaseException):
-    pass
+    """Raised when eval_expression exceeds its time limit.
+
+    Inherits from BaseException (not Exception) so that user
+    expressions containing ``except Exception`` cannot swallow it.
+    """
 
 
 def _timeout_handler(signum: int, frame: types.FrameType | None) -> None:
@@ -224,10 +232,6 @@ def list_helpers(module: str = "") -> str:
         list_helpers("sched")
     """
     state.require_loaded()
-    import importlib
-    import pkgutil
-
-    import drgn.helpers.linux
 
     module_objs: dict[str, object] = {}
     modules: dict[str, list[str]] = {}
