@@ -8,14 +8,180 @@ dist/
 build/
 .venv/
 
-# Claude
-.claude/
-.serena
-CLAUDE.md
-
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
+
+# ========================================== #
+# AI / LLM / Agent Coding Assistants        #
+# ========================================== #
+
+# Claude Code
+.claude/
+.claude.json
+CLAUDE.md
+
+# Serena
+.serena/
+
+# Cursor
+.cursor/
+.cursorrules
+.cursorignore
+.cursor-tutor/
+
+# Windsurf / Codeium
+.windsurf/
+.windsurfrules
+.codeium/
+.codeiumignore
+
+# Aider
+.aider/
+.aider.conf.yml
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v*
+aider.chat.history.md
+
+# Continue
+.continue/
+continue.yaml
+.continuerc.json
+
+# Cline (formerly Claude Dev)
+.cline/
+cline_docs/
+.cline_mcp_settings.json
+.clinerules
+.clinerules-*
+
+# Roo Code (Roo Cline)
+.roo/
+.roorules
+.roomcp.json
+.rooignore
+
+# OpenHands (OpenDevin)
+.openhands/
+.opendevin/
+
+# Devin
+.devin/
+.devinrules
+
+# GitHub Copilot
+.copilot/
+.copilotignore
+github-copilot-chat/
+
+# OpenAI Codex CLI
+.codex/
+codex.md
+CODEX.md
+
+# Gemini CLI
+.gemini/
+GEMINI.md
+
+# Amazon Q (CodeWhisperer)
+.aws-q/
+.amazonq/
+
+# Tabnine
+.tabnine/
+.tabnine-root
+
+# Sourcegraph Cody
+.cody/
+cody.json
+
+# JetBrains AI
+.idea/ai/
+
+# Augment
+.augment/
+.augmentignore
+
+# Supermaven
+.supermaven/
+.supermavenignore
+
+# Sweep AI
+.sweep/
+sweep.yaml
+
+# GPT Engineer
+.gpteng/
+
+# Mentat
+.mentat/
+
+# SWE-agent
+swe_agent_workspace/
+trajectories/
+
+# AutoCodeRover
+.autocoderover/
+acr_workspace/
+
+# bolt.new / v0 / Lovable / Replit Agent
+.bolt/
+.bolt-config.json
+.v0/
+.lovable/
+.replit-agent/
+
+# Amplify
+.amplify/
+
+# Pieces
+.pieces/
+
+# Phind
+.phind/
+
+# Blackbox AI
+.blackbox/
+
+# CodeGeeX
+.codegeex/
+
+# Bito AI
+.bito/
+
+# Mutable.ai
+.mutable/
+
+# Smol Developer
+.smol/
+
+# Goose (Block)
+.goose/
+
+# Trae
+.trae/
+.trae-rules
+
+# Zed AI
+.zed-ai/
+
+# Warp AI
+.warp/
+
+# Generic MCP (Model Context Protocol)
+.mcp/
+mcp.json
+mcp_settings.json
+
+# Generic AI / agent patterns
+.aigents/
+.agentrules
+AGENTS.md
+llm-logs/
+ai-logs/
+.llm-cache/
+.ai-cache/
