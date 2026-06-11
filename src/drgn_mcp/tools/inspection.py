@@ -22,7 +22,9 @@ def get_crashed_thread() -> str:
     prog = state.require_loaded()
     thread = prog.crashed_thread()
     trace = thread.stack_trace()
-    return f"Crashed thread: tid={thread.tid}, name={thread.name}\n\nStack trace:\n{trace}"
+    return (
+        f"Crashed thread: tid={thread.tid}, name={thread.name}\n\nStack trace:\n{trace}"
+    )
 
 
 @mcp.tool()

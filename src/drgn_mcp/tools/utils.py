@@ -9,6 +9,7 @@ from drgn.helpers.linux.percpu import per_cpu
 
 from drgn_mcp._app import _eval_expr, mcp
 from drgn_mcp.state import state
+from drgn_mcp.tools._helpers import parse_address, truncate_output
 
 
 @mcp.tool()
@@ -34,7 +35,7 @@ def identify_address(address: int | str) -> str:
     """
     prog = state.require_loaded()
 
-    addr = address if isinstance(address, int) else int(address, 0)
+    addr = parse_address(address)
     try:
         result = _identify_address(prog, addr)
     except drgn.FaultError as e:
@@ -78,10 +79,7 @@ def annotated_stack(thread_id: int) -> str:
         stdout_capture.write(f"\n... Annotation aborted due to memory fault: {e}")
 
     output = stdout_capture.getvalue()
-    max_len = 8000
-    if len(output) > max_len:
-        output = output[:max_len] + f"\n... (truncated, {len(output)} total chars)"
-    return output if output else "Empty stack"
+    return truncate_output(output) if output else "Empty stack"
 
 
 @mcp.tool()
@@ -137,8 +135,5 @@ def read_percpu(var_expr: str, cpu: int = -1) -> str:
         except drgn.FaultError as e:
             lines.append(f"cpu {cpu_id}: <fault: {e}>")
 
-    max_len = 8000
     output = "\n".join(lines) if lines else "No online CPUs found"
-    if len(output) > max_len:
-        output = output[:max_len] + f"\n... (truncated, {len(output)} total chars)"
-    return output
+    return truncate_output(output)

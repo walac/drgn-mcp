@@ -18,7 +18,11 @@ from drgn.helpers.linux.cgroup import (
     cgroup_path,
     css_for_each_descendant_pre,
 )
-from drgn.helpers.linux.cpumask import for_each_online_cpu, num_online_cpus, num_possible_cpus
+from drgn.helpers.linux.cpumask import (
+    for_each_online_cpu,
+    num_online_cpus,
+    num_possible_cpus,
+)
 from drgn.helpers.linux.fs import (
     d_path,
     for_each_file,
@@ -27,7 +31,11 @@ from drgn.helpers.linux.fs import (
     mount_fstype,
     mount_src,
 )
-from drgn.helpers.linux.irq import for_each_irq_desc, irq_desc_action_names, irq_desc_chip_name
+from drgn.helpers.linux.irq import (
+    for_each_irq_desc,
+    irq_desc_action_names,
+    irq_desc_chip_name,
+)
 from drgn.helpers.linux.kconfig import get_kconfig as _get_kconfig
 from drgn.helpers.linux.locking import mutex_owner, rwsem_locked, rwsem_owner
 from drgn.helpers.linux.mm import cmdline, environ
@@ -55,6 +63,7 @@ from drgn.helpers.linux.timer import (
 
 from drgn_mcp._app import _eval_expr, mcp
 from drgn_mcp.state import state
+from drgn_mcp.tools._helpers import truncate_output
 
 
 @mcp.tool()
@@ -260,7 +269,11 @@ def list_irqs(limit: int = 256) -> str:
         chip = irq_desc_chip_name(desc)
         chip_str = chip.decode(errors="replace") if chip else "none"
         actions = irq_desc_action_names(desc)
-        action_str = ", ".join(a.decode(errors="replace") for a in actions) if actions else "none"
+        action_str = (
+            ", ".join(a.decode(errors="replace") for a in actions)
+            if actions
+            else "none"
+        )
         lines.append(f"IRQ {irq_num}: chip={chip_str} actions=[{action_str}]")
         count += 1
 
@@ -332,7 +345,11 @@ def list_bpf(bpf_type: str = "progs", limit: int = 100) -> str:
                         break
                     try:
                         btf_id = btf.id.value_()
-                        name = btf.name.string_().decode(errors="replace") if btf.name else ""
+                        name = (
+                            btf.name.string_().decode(errors="replace")
+                            if btf.name
+                            else ""
+                        )
                         lines.append(f"btf id={btf_id} name={name}")
                     except drgn.FaultError as e:
                         lines.append(f"btf <fault: {e}>")
@@ -397,11 +414,7 @@ def get_kconfig(key: str = "") -> str:
         return f"{key}={value}" if value is not None else f"{key} is not set"
 
     lines = [f"{k}={v}" for k, v in sorted(config.items())]
-    max_len = 8000
-    output = "\n".join(lines)
-    if len(output) > max_len:
-        output = output[:max_len] + f"\n... (truncated, {len(output)} total chars)"
-    return output
+    return truncate_output("\n".join(lines))
 
 
 @mcp.tool()
@@ -471,11 +484,7 @@ def get_environ(pid: int) -> str:
     if env is None:
         return f"Task {pid} is a kernel thread (no environment)"
 
-    output = "\n".join(e.decode(errors="replace") for e in env)
-    max_len = 8000
-    if len(output) > max_len:
-        output = output[:max_len] + f"\n... (truncated, {len(output)} total chars)"
-    return output
+    return truncate_output("\n".join(e.decode(errors="replace") for e in env))
 
 
 @mcp.tool()
@@ -519,7 +528,9 @@ def list_timers(timer_type: str = "wheel", limit: int = 100) -> str:
                                 return "\n".join(lines)
                             fn = timer.function
                             expires = timer.expires.value_()
-                            lines.append(f"cpu={cpu} base={name} fn={fn} expires={expires}")
+                            lines.append(
+                                f"cpu={cpu} base={name} fn={fn} expires={expires}"
+                            )
                             count += 1
                     except drgn.FaultError as e:
                         lines.append(f"cpu={cpu} base={name}: <fault: {e}>")
@@ -532,7 +543,9 @@ def list_timers(timer_type: str = "wheel", limit: int = 100) -> str:
                     continue
                 for idx, clock_base in enumerate(cpu_base.clock_base):
                     try:
-                        for hrt in hrtimer_clock_base_for_each(clock_base.address_of_()):
+                        for hrt in hrtimer_clock_base_for_each(
+                            clock_base.address_of_()
+                        ):
                             if count >= limit:
                                 lines.append(f"... (limited to {limit} timers)")
                                 return "\n".join(lines)

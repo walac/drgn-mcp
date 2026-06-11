@@ -32,6 +32,7 @@ from drgn.helpers.linux.slab import (
 
 from drgn_mcp._app import mcp
 from drgn_mcp.state import state
+from drgn_mcp.tools._helpers import format_hexdump, parse_address, truncate_output
 
 
 @mcp.tool()
@@ -55,16 +56,10 @@ def read_memory(address: int | str, size: int = 64) -> str:
         read_memory(0xffffffff81000000)
     """
     prog = state.require_loaded()
-    addr = address if isinstance(address, int) else int(address, 0)
+    addr = parse_address(address)
     size = min(size, 4096)
     data = prog.read(addr, size)
-    lines = []
-    for offset in range(0, len(data), 16):
-        chunk = data[offset : offset + 16]
-        hex_part = " ".join(f"{b:02x}" for b in chunk)
-        ascii_part = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
-        lines.append(f"{addr + offset:#018x}  {hex_part:<48s}  {ascii_part}")
-    return "\n".join(lines)
+    return format_hexdump(data, addr)
 
 
 @mcp.tool()
@@ -79,13 +74,13 @@ def get_dmesg() -> str:
     """
     prog = state.require_loaded()
 
-    lines = [f"[{r.timestamp / 1_000_000_000:>12.6f}] {r.text}" for r in get_printk_records(prog)]
+    lines = [
+        f"[{r.timestamp / 1_000_000_000:>12.6f}] {r.text}"
+        for r in get_printk_records(prog)
+    ]
     output = "\n".join(lines)
 
-    max_len = 8000
-    if len(output) > max_len:
-        return f"... (truncated, {len(output)} total chars)\n{output[-max_len:]}"
-    return output
+    return truncate_output(output, keep="tail")
 
 
 @mcp.tool()
@@ -231,7 +226,7 @@ def read_typed_memory(
         read_typed_memory(0xffffffff82000000, value_type="u64", count=4)
     """
     prog = state.require_loaded()
-    addr = address if isinstance(address, int) else int(address, 0)
+    addr = parse_address(address)
 
     try:
         match value_type:
@@ -292,7 +287,7 @@ def translate_address(
         translate_address(0xffff888100000000, "virt_to_pfn")
     """
     prog = state.require_loaded()
-    addr = address if isinstance(address, int) else int(address, 0)
+    addr = parse_address(address)
 
     try:
         match direction:
@@ -350,7 +345,7 @@ def get_page_info(
         get_page_info(256, source="pfn")
     """
     prog = state.require_loaded()
-    addr = address if isinstance(address, int) else int(address, 0)
+    addr = parse_address(address)
 
     try:
         match source:
@@ -473,7 +468,7 @@ def get_vma_info(
         return f"Task {pid} has no mm_struct (kernel thread?)"
 
     if address is not None:
-        addr = address if isinstance(address, int) else int(address, 0)
+        addr = parse_address(address)
         vma = vma_find(mm, addr)
         if not vma:
             return f"No VMA contains address {addr:#x} in task {pid}"
@@ -618,7 +613,7 @@ def read_process_memory(
     if not mm:
         return f"Task {pid} is a kernel thread (no address space)"
 
-    addr = address if isinstance(address, int) else int(address, 0)
+    addr = parse_address(address)
     size = min(size, 4096)
 
     try:
@@ -626,10 +621,4 @@ def read_process_memory(
     except drgn.FaultError as e:
         return f"Memory fault at {addr:#x} in task {pid}: {e}"
 
-    lines = []
-    for offset in range(0, len(data), 16):
-        chunk = data[offset : offset + 16]
-        hex_part = " ".join(f"{b:02x}" for b in chunk)
-        ascii_part = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
-        lines.append(f"{addr + offset:#018x}  {hex_part:<48s}  {ascii_part}")
-    return "\n".join(lines)
+    return format_hexdump(data, addr)

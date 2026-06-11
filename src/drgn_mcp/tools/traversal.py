@@ -85,7 +85,9 @@ def traverse_list(
                 lines.append(f"... (limited to {limit} entries)")
                 break
             if fmt_code:
-                lines.append(str(eval(fmt_code, {**state.globals, "entry": entry})))  # noqa: S307
+                lines.append(
+                    str(eval(fmt_code, {**state.globals, "entry": entry}))
+                )  # noqa: S307
             else:
                 lines.append(f"{entry.value_():#x}")
             count += 1
@@ -160,7 +162,9 @@ def traverse_rbtree(
                 lines.append(f"... (limited to {limit} entries)")
                 break
             if fmt_code:
-                lines.append(str(eval(fmt_code, {**state.globals, "entry": entry})))  # noqa: S307
+                lines.append(
+                    str(eval(fmt_code, {**state.globals, "entry": entry}))
+                )  # noqa: S307
             else:
                 lines.append(f"{entry.value_():#x}")
             count += 1

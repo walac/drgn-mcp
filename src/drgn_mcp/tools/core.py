@@ -10,6 +10,7 @@ import drgn.helpers.linux
 
 from drgn_mcp._app import mcp
 from drgn_mcp.state import state
+from drgn_mcp.tools._helpers import truncate_output
 
 
 @mcp.tool()
@@ -112,7 +113,9 @@ def _format_eval_error(exc: BaseException, expression: str, partial_output: str)
     if partial_output:
         max_partial = 2000
         if len(partial_output) > max_partial:
-            partial_output = partial_output[:max_partial] + "\n... (partial output truncated)"
+            partial_output = (
+                partial_output[:max_partial] + "\n... (partial output truncated)"
+            )
         parts.append(f"Partial output before error:\n{partial_output}")
 
     return "\n\n".join(parts)
@@ -200,11 +203,7 @@ def eval_expression(expression: str, timeout: int = 30) -> str:
 
     output = "\n".join(output_parts) if output_parts else "(no output)"
 
-    max_len = 8000
-    if len(output) > max_len:
-        output = output[:max_len] + f"\n... (truncated, {len(output)} total chars)"
-
-    return output
+    return truncate_output(output)
 
 
 @mcp.tool()
@@ -266,11 +265,7 @@ def list_helpers(module: str = "") -> str:
             lines.append(f"  {name}{sig}")
             if first_line:
                 lines.append(f"      {first_line}")
-        output = "\n".join(lines)
-        max_len = 8000
-        if len(output) > max_len:
-            output = output[:max_len] + f"\n... (truncated, {len(output)} total chars)"
-        return output
+        return truncate_output("\n".join(lines))
 
     lines = []
     for name in sorted(modules.keys()):
