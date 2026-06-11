@@ -85,7 +85,5 @@ def list_files(pid: int, limit: int = 100, offset: int = 0) -> str:
             path = "<fault>"
         return f"fd={fd} {path}"
 
-    lines = paginated_lines(
-        for_each_file(task), fmt, offset=offset, limit=limit, label="files"
-    )
+    lines = paginated_lines(for_each_file(task), fmt, offset=offset, limit=limit, label="files")
     return "\n".join(lines) if lines else "No open files"

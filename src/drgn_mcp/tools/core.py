@@ -113,9 +113,7 @@ def _format_eval_error(exc: BaseException, expression: str, partial_output: str)
     if partial_output:
         max_partial = 2000
         if len(partial_output) > max_partial:
-            partial_output = (
-                partial_output[:max_partial] + "\n... (partial output truncated)"
-            )
+            partial_output = partial_output[:max_partial] + "\n... (partial output truncated)"
         parts.append(f"Partial output before error:\n{partial_output}")
 
     return "\n\n".join(parts)

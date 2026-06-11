@@ -35,9 +35,7 @@ def get_crashed_thread() -> str:
             f"Could not get stack trace: {e}"
         )
 
-    return (
-        f"Crashed thread: tid={thread.tid}, name={thread.name}\n\nStack trace:\n{trace}"
-    )
+    return f"Crashed thread: tid={thread.tid}, name={thread.name}\n\nStack trace:\n{trace}"
 
 
 @mcp.tool()
@@ -186,7 +184,9 @@ def lookup_type(type_name: str) -> str:
     try:
         t = prog.type(type_name)
     except LookupError:
-        return f"No type found with name '{type_name}'. Check spelling (e.g., 'struct task_struct')."
+        return (
+            f"No type found with name '{type_name}'. Check spelling (e.g., 'struct task_struct')."
+        )
 
     return str(t)
 
@@ -281,9 +281,7 @@ def list_tasks(limit: int = 100, offset: int = 0) -> str:
         state_char = task_state_to_char(task)
         return f"pid={pid} comm={comm} state={state_char}"
 
-    lines = paginated_lines(
-        for_each_task(prog), fmt, offset=offset, limit=limit, label="tasks"
-    )
+    lines = paginated_lines(for_each_task(prog), fmt, offset=offset, limit=limit, label="tasks")
     return "\n".join(lines) if lines else "No tasks found"
 
 

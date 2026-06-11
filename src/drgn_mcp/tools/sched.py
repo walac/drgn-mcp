@@ -76,16 +76,10 @@ def list_irqs(limit: int = 256, offset: int = 0) -> str:
         chip = irq_desc_chip_name(desc)
         chip_str = chip.decode(errors="replace") if chip else "none"
         actions = irq_desc_action_names(desc)
-        action_str = (
-            ", ".join(a.decode(errors="replace") for a in actions)
-            if actions
-            else "none"
-        )
+        action_str = ", ".join(a.decode(errors="replace") for a in actions) if actions else "none"
         return f"IRQ {irq_num}: chip={chip_str} actions=[{action_str}]"
 
-    lines = paginated_lines(
-        for_each_irq_desc(prog), fmt, offset=offset, limit=limit, label="IRQs"
-    )
+    lines = paginated_lines(for_each_irq_desc(prog), fmt, offset=offset, limit=limit, label="IRQs")
     return "\n".join(lines) if lines else "No IRQs found"
 
 
@@ -130,9 +124,7 @@ def list_timers(timer_type: str = "wheel", limit: int = 100) -> str:
                                 return "\n".join(lines)
                             fn = timer.function
                             expires = timer.expires.value_()
-                            lines.append(
-                                f"cpu={cpu} base={name} fn={fn} expires={expires}"
-                            )
+                            lines.append(f"cpu={cpu} base={name} fn={fn} expires={expires}")
                             count += 1
                     except drgn.FaultError as e:
                         lines.append(f"cpu={cpu} base={name}: <fault: {e}>")
@@ -145,9 +137,7 @@ def list_timers(timer_type: str = "wheel", limit: int = 100) -> str:
                     continue
                 for idx, clock_base in enumerate(cpu_base.clock_base):
                     try:
-                        for hrt in hrtimer_clock_base_for_each(
-                            clock_base.address_of_()
-                        ):
+                        for hrt in hrtimer_clock_base_for_each(clock_base.address_of_()):
                             if count >= limit:
                                 lines.append(f"... (limited to {limit} timers)")
                                 return "\n".join(lines)

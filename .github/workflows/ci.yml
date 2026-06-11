@@ -20,7 +20,7 @@ jobs:
         run: uv sync
 
       - name: Check formatting (black)
-        run: uv run black -l 100 -t py312 --check src/
+        run: uv run black -t py312 --check src/
 
       - name: Lint (ruff)
         run: uv run ruff check src/

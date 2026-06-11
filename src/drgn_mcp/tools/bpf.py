@@ -116,11 +116,7 @@ def list_bpf(bpf_type: str = "progs", limit: int = 100, offset: int = 0) -> str:
                         break
                     try:
                         btf_id = btf.id.value_()
-                        name = (
-                            btf.name.string_().decode(errors="replace")
-                            if btf.name
-                            else ""
-                        )
+                        name = btf.name.string_().decode(errors="replace") if btf.name else ""
                         lines.append(f"btf id={btf_id} name={name}")
                     except drgn.FaultError as e:
                         lines.append(f"btf <fault: {e}>")
