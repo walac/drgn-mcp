@@ -1,6 +1,6 @@
 from drgn_mcp._app import mcp
 
-import drgn_mcp.tools  # noqa: F401  # registers all 38 MCP tools
+import drgn_mcp.tools  # noqa: F401  # registers all 54 MCP tools
 
 
 def main():

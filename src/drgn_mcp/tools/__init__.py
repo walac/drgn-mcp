@@ -1,6 +1,11 @@
+from drgn_mcp.tools import bpf  # noqa: F401
+from drgn_mcp.tools import cgroup  # noqa: F401
 from drgn_mcp.tools import core  # noqa: F401
+from drgn_mcp.tools import fs  # noqa: F401
 from drgn_mcp.tools import inspection  # noqa: F401
 from drgn_mcp.tools import memory  # noqa: F401
-from drgn_mcp.tools import subsystems  # noqa: F401
+from drgn_mcp.tools import net  # noqa: F401
+from drgn_mcp.tools import sched  # noqa: F401
+from drgn_mcp.tools import sysinfo  # noqa: F401
 from drgn_mcp.tools import traversal  # noqa: F401
 from drgn_mcp.tools import utils  # noqa: F401
