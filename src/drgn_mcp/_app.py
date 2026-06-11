@@ -1,8 +1,18 @@
 from typing import Any
 
+import drgn
 from mcp.server.fastmcp import FastMCP
 
 from drgn_mcp.state import state
+
+EVAL_ERRORS = (
+    drgn.FaultError,
+    LookupError,
+    ValueError,
+    SyntaxError,
+    AttributeError,
+    TypeError,
+)
 
 _INSTRUCTIONS = """
 You are connected to a drgn debugger session for Linux kernel crash

@@ -5,6 +5,7 @@ from drgn.helpers.linux.panic import panic_message
 
 from drgn_mcp._app import mcp
 from drgn_mcp.state import state
+from drgn_mcp.tools._helpers import paginated_lines
 
 
 @mcp.tool()
@@ -51,7 +52,7 @@ def get_stack_trace(thread_id: int) -> str:
 
 
 @mcp.tool()
-def list_threads(limit: int = 100) -> str:
+def list_threads(limit: int = 100, offset: int = 0) -> str:
     """List all threads in the program.
 
     Use this to get a high-level overview. For detailed inspection of a single
@@ -59,23 +60,21 @@ def list_threads(limit: int = 100) -> str:
 
     Args:
         limit: Maximum number of threads to return.
+        offset: Number of threads to skip (for pagination).
 
     Returns:
         A multi-line string listing threads with TID and name.
         Appends a truncation notice if threads exceed limit.
     """
     prog = state.require_loaded()
-    lines = []
-    count = 0
-    for thread in prog.threads():
-        if count >= limit:
-            lines.append(f"... (showing {limit} of more threads, use higher limit)")
-            break
-        lines.append(f"tid={thread.tid} name={thread.name}")
-        count += 1
-    if not lines:
-        return "No threads found"
-    return "\n".join(lines)
+    lines = paginated_lines(
+        prog.threads(),
+        lambda t: f"tid={t.tid} name={t.name}",
+        offset=offset,
+        limit=limit,
+        label="threads",
+    )
+    return "\n".join(lines) if lines else "No threads found"
 
 
 @mcp.tool()
@@ -228,7 +227,7 @@ def lookup_symbol(address_or_name: int | str, limit: int = 100) -> str:
 
 
 @mcp.tool()
-def list_tasks(limit: int = 100) -> str:
+def list_tasks(limit: int = 100, offset: int = 0) -> str:
     """List all tasks (processes) in the Linux kernel.
 
     Use this to get a high-level overview of running processes. For detailed
@@ -236,6 +235,7 @@ def list_tasks(limit: int = 100) -> str:
 
     Args:
         limit: Maximum number of tasks to return.
+        offset: Number of tasks to skip (for pagination).
 
     Returns:
         A multi-line string listing tasks with PID, comm (name), and state
@@ -245,18 +245,16 @@ def list_tasks(limit: int = 100) -> str:
     from drgn.helpers.linux.pid import for_each_task
     from drgn.helpers.linux.sched import task_state_to_char
 
-    lines = []
-    count = 0
-    for task in for_each_task(prog):
-        if count >= limit:
-            lines.append(f"... (truncated at {limit})")
-            break
+    def fmt(task):
         pid = task.pid.value_()
-        comm = task.comm.string_().decode()
+        comm = task.comm.string_().decode(errors="replace")
         state_char = task_state_to_char(task)
-        lines.append(f"pid={pid} comm={comm} state={state_char}")
-        count += 1
-    return "\n".join(lines)
+        return f"pid={pid} comm={comm} state={state_char}"
+
+    lines = paginated_lines(
+        for_each_task(prog), fmt, offset=offset, limit=limit, label="tasks"
+    )
+    return "\n".join(lines) if lines else "No tasks found"
 
 
 @mcp.tool()

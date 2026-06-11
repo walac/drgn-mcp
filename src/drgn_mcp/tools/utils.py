@@ -7,7 +7,7 @@ from drgn.helpers.common.stack import print_annotated_stack
 from drgn.helpers.linux.cpumask import for_each_online_cpu
 from drgn.helpers.linux.percpu import per_cpu
 
-from drgn_mcp._app import _eval_expr, mcp
+from drgn_mcp._app import EVAL_ERRORS, _eval_expr, mcp
 from drgn_mcp.state import state
 from drgn_mcp.tools._helpers import parse_address, truncate_output
 
@@ -110,14 +110,7 @@ def read_percpu(var_expr: str, cpu: int = -1) -> str:
 
     try:
         var = _eval_expr(var_expr)
-    except (
-        drgn.FaultError,
-        LookupError,
-        ValueError,
-        SyntaxError,
-        AttributeError,
-        TypeError,
-    ) as e:
+    except EVAL_ERRORS as e:
         return f"Error evaluating expression: {e}"
 
     if cpu >= 0:

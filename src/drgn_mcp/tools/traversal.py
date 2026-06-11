@@ -1,11 +1,86 @@
+from collections.abc import Callable, Iterator
+from typing import Any
+
 import drgn
 from drgn.helpers.linux.idr import idr_for_each_entry
 from drgn.helpers.linux.list import hlist_for_each_entry, list_for_each_entry
 from drgn.helpers.linux.rbtree import rbtree_inorder_for_each_entry
 from drgn.helpers.linux.xarray import xa_for_each
 
-from drgn_mcp._app import _eval_expr, mcp
+from drgn_mcp._app import EVAL_ERRORS, _eval_expr, mcp
 from drgn_mcp.state import state
+
+
+def _traverse(
+    expr: str,
+    expr_label: str,
+    make_iterator: Callable[[Any], Iterator],
+    *,
+    format_expr: str,
+    offset: int,
+    limit: int,
+    loop_vars: Callable[[Any], dict[str, Any]],
+    default_fmt: Callable[[Any], str],
+    empty_msg: str,
+) -> str:
+    """Shared traversal logic for all traverse_* tools.
+
+    Args:
+        expr: drgn expression to evaluate for the data structure head/root.
+        expr_label: Human-readable label for error messages (e.g., "head", "root").
+        make_iterator: Factory that takes the evaluated object and returns an iterator.
+        format_expr: User-supplied Python expression for formatting each entry.
+        offset: Number of entries to skip.
+        limit: Maximum entries to return.
+        loop_vars: Extracts loop variable dict from each yielded item for format_expr eval.
+        default_fmt: Default formatter when format_expr is empty.
+        empty_msg: Message returned when the iterator yields nothing.
+    """
+    state.require_loaded()
+    offset = max(0, offset)
+    limit = max(1, limit)
+
+    try:
+        obj = _eval_expr(expr)
+    except EVAL_ERRORS as e:
+        return f"Error evaluating {expr_label} expression: {e}"
+
+    fmt_code = None
+    if format_expr:
+        try:
+            fmt_code = compile(format_expr, "<format_expr>", "eval")
+        except SyntaxError as e:
+            return f"Syntax error in format_expr: {e}"
+
+    try:
+        iterator = make_iterator(obj)
+    except (TypeError, drgn.FaultError) as e:
+        return str(e)
+
+    lines: list[str] = []
+    skipped = 0
+    count = 0
+    try:
+        for item in iterator:
+            if skipped < offset:
+                skipped += 1
+                continue
+            if count >= limit:
+                lines.append(
+                    f"... (limited to {limit} entries, use offset={offset + limit} for next page)"
+                )
+                break
+            if fmt_code:
+                lines.append(
+                    str(eval(fmt_code, state.globals, loop_vars(item)))  # noqa: S307
+                )
+            else:
+                lines.append(default_fmt(item))
+            count += 1
+    except drgn.FaultError as e:
+        lines.append(f"... Traversal aborted due to memory fault: {e}")
+
+    return "\n".join(lines) if lines else empty_msg
 
 
 @mcp.tool()
@@ -15,6 +90,7 @@ def traverse_list(
     member: str,
     limit: int = 100,
     format_expr: str = "",
+    offset: int = 0,
 ) -> str:
     """Traverse a Linux kernel linked list (list_head or hlist_head).
 
@@ -37,6 +113,7 @@ def traverse_list(
             the output. The current entry is available as the "entry" variable
             (a drgn.Object pointer). If empty, defaults to returning the hex
             address of the entry pointer.
+        offset: Number of entries to skip (for pagination).
 
     Returns:
         A multi-line string with one line per entry. If format_expr is provided,
@@ -48,53 +125,26 @@ def traverse_list(
         traverse_list("prog['init_task'].children", "struct task_struct", "sibling",
             format_expr="f'PID: {entry.pid.value_()}'")
     """
-    state.require_loaded()
 
-    try:
-        head_obj = _eval_expr(head_expr)
-    except (
-        drgn.FaultError,
-        LookupError,
-        ValueError,
-        SyntaxError,
-        AttributeError,
-        TypeError,
-    ) as e:
-        return f"Error evaluating head expression: {e}"
+    def make_iterator(head_obj):
+        type_name = head_obj.type_.type_name()
+        if "hlist_head" in type_name:
+            return hlist_for_each_entry(entry_type, head_obj, member)
+        if "list_head" in type_name:
+            return list_for_each_entry(entry_type, head_obj, member)
+        raise TypeError(f"Expected struct list_head or hlist_head, got {type_name}")
 
-    type_name = head_obj.type_.type_name()
-    if "hlist_head" in type_name:
-        iterator = hlist_for_each_entry(entry_type, head_obj, member)
-    elif "list_head" in type_name:
-        iterator = list_for_each_entry(entry_type, head_obj, member)
-    else:
-        return f"Expected struct list_head or hlist_head, got {type_name}"
-
-    fmt_code = None
-    if format_expr:
-        try:
-            fmt_code = compile(format_expr, "<format_expr>", "eval")
-        except SyntaxError as e:
-            return f"Syntax error in format_expr: {e}"
-
-    lines = []
-    count = 0
-    try:
-        for entry in iterator:
-            if count >= limit:
-                lines.append(f"... (limited to {limit} entries)")
-                break
-            if fmt_code:
-                lines.append(
-                    str(eval(fmt_code, {**state.globals, "entry": entry}))
-                )  # noqa: S307
-            else:
-                lines.append(f"{entry.value_():#x}")
-            count += 1
-    except drgn.FaultError as e:
-        lines.append(f"... Traversal aborted due to memory fault: {e}")
-
-    return "\n".join(lines) if lines else "Empty list"
+    return _traverse(
+        head_expr,
+        "head",
+        make_iterator,
+        format_expr=format_expr,
+        offset=offset,
+        limit=limit,
+        loop_vars=lambda entry: {"entry": entry},
+        default_fmt=lambda entry: f"{entry.value_():#x}",
+        empty_msg="Empty list",
+    )
 
 
 @mcp.tool()
@@ -104,6 +154,7 @@ def traverse_rbtree(
     member: str,
     limit: int = 100,
     format_expr: str = "",
+    offset: int = 0,
 ) -> str:
     """Traverse a Linux kernel Red-Black tree in sorted order.
 
@@ -121,6 +172,7 @@ def traverse_rbtree(
         format_expr: Optional Python expression evaluated for each entry. The
             current entry is available as the "entry" variable (a drgn.Object
             pointer). If empty, defaults to returning the hex address.
+        offset: Number of entries to skip (for pagination).
 
     Returns:
         A multi-line string with one line per entry, formatted via format_expr
@@ -133,45 +185,17 @@ def traverse_rbtree(
             "vm_rb",
             format_expr="f'{entry.vm_start.value_():#x} - {entry.vm_end.value_():#x}'")
     """
-    state.require_loaded()
-
-    try:
-        root_obj = _eval_expr(root_expr)
-    except (
-        drgn.FaultError,
-        LookupError,
-        ValueError,
-        SyntaxError,
-        AttributeError,
-        TypeError,
-    ) as e:
-        return f"Error evaluating root expression: {e}"
-
-    fmt_code = None
-    if format_expr:
-        try:
-            fmt_code = compile(format_expr, "<format_expr>", "eval")
-        except SyntaxError as e:
-            return f"Syntax error in format_expr: {e}"
-
-    lines = []
-    count = 0
-    try:
-        for entry in rbtree_inorder_for_each_entry(entry_type, root_obj, member):
-            if count >= limit:
-                lines.append(f"... (limited to {limit} entries)")
-                break
-            if fmt_code:
-                lines.append(
-                    str(eval(fmt_code, {**state.globals, "entry": entry}))
-                )  # noqa: S307
-            else:
-                lines.append(f"{entry.value_():#x}")
-            count += 1
-    except drgn.FaultError as e:
-        lines.append(f"... Traversal aborted due to memory fault: {e}")
-
-    return "\n".join(lines) if lines else "Empty tree"
+    return _traverse(
+        root_expr,
+        "root",
+        lambda obj: rbtree_inorder_for_each_entry(entry_type, obj, member),
+        format_expr=format_expr,
+        offset=offset,
+        limit=limit,
+        loop_vars=lambda entry: {"entry": entry},
+        default_fmt=lambda entry: f"{entry.value_():#x}",
+        empty_msg="Empty tree",
+    )
 
 
 @mcp.tool()
@@ -179,6 +203,7 @@ def traverse_xarray(
     xa_expr: str,
     limit: int = 100,
     format_expr: str = "",
+    offset: int = 0,
 ) -> str:
     """Traverse a Linux kernel XArray data structure.
 
@@ -194,6 +219,7 @@ def traverse_xarray(
             - "index": The integer index in the XArray.
             - "entry": The drgn.Object pointer stored at that index.
             If empty, defaults to "index: hex_address".
+        offset: Number of entries to skip (for pagination).
 
     Returns:
         A multi-line string with one line per entry. Appends a warning if
@@ -204,50 +230,17 @@ def traverse_xarray(
         traverse_xarray("prog['init_task'].mm.exe_file.f_mapping.i_pages",
             format_expr="f'index {index}: page {entry.value_():#x}'")
     """
-    state.require_loaded()
-
-    try:
-        xa_obj = _eval_expr(xa_expr)
-    except (
-        drgn.FaultError,
-        LookupError,
-        ValueError,
-        SyntaxError,
-        AttributeError,
-        TypeError,
-    ) as e:
-        return f"Error evaluating xarray expression: {e}"
-
-    fmt_code = None
-    if format_expr:
-        try:
-            fmt_code = compile(format_expr, "<format_expr>", "eval")
-        except SyntaxError as e:
-            return f"Syntax error in format_expr: {e}"
-
-    lines = []
-    count = 0
-    try:
-        for index, entry in xa_for_each(xa_obj):
-            if count >= limit:
-                lines.append(f"... (limited to {limit} entries)")
-                break
-            if fmt_code:
-                lines.append(
-                    str(
-                        eval(  # noqa: S307
-                            fmt_code,
-                            {**state.globals, "index": index, "entry": entry},
-                        )
-                    )
-                )
-            else:
-                lines.append(f"{index}: {entry.value_():#x}")
-            count += 1
-    except drgn.FaultError as e:
-        lines.append(f"... Traversal aborted due to memory fault: {e}")
-
-    return "\n".join(lines) if lines else "Empty xarray"
+    return _traverse(
+        xa_expr,
+        "xarray",
+        xa_for_each,
+        format_expr=format_expr,
+        offset=offset,
+        limit=limit,
+        loop_vars=lambda item: {"index": item[0], "entry": item[1]},
+        default_fmt=lambda item: f"{item[0]}: {item[1].value_():#x}",
+        empty_msg="Empty xarray",
+    )
 
 
 @mcp.tool()
@@ -256,6 +249,7 @@ def traverse_idr(
     entry_type: str,
     limit: int = 100,
     format_expr: str = "",
+    offset: int = 0,
 ) -> str:
     """Traverse a Linux kernel IDR (Integer ID Management) data structure.
 
@@ -272,6 +266,7 @@ def traverse_idr(
             - "id": The integer ID.
             - "entry": The drgn.Object pointer stored for that ID.
             If empty, defaults to "id: hex_address".
+        offset: Number of entries to skip (for pagination).
 
     Returns:
         A multi-line string with one line per entry. Appends a warning if
@@ -282,47 +277,14 @@ def traverse_idr(
         traverse_idr("prog['cgroup_hierarchy_idr']", "struct cgroup_root",
             format_expr="f'cgroup ID {id}: {entry.value_():#x}'")
     """
-    state.require_loaded()
-
-    try:
-        idr_obj = _eval_expr(idr_expr)
-    except (
-        drgn.FaultError,
-        LookupError,
-        ValueError,
-        SyntaxError,
-        AttributeError,
-        TypeError,
-    ) as e:
-        return f"Error evaluating IDR expression: {e}"
-
-    fmt_code = None
-    if format_expr:
-        try:
-            fmt_code = compile(format_expr, "<format_expr>", "eval")
-        except SyntaxError as e:
-            return f"Syntax error in format_expr: {e}"
-
-    lines = []
-    count = 0
-    try:
-        for id, entry in idr_for_each_entry(idr_obj, entry_type):
-            if count >= limit:
-                lines.append(f"... (limited to {limit} entries)")
-                break
-            if fmt_code:
-                lines.append(
-                    str(
-                        eval(  # noqa: S307
-                            fmt_code,
-                            {**state.globals, "id": id, "entry": entry},
-                        )
-                    )
-                )
-            else:
-                lines.append(f"{id}: {entry.value_():#x}")
-            count += 1
-    except drgn.FaultError as e:
-        lines.append(f"... Traversal aborted due to memory fault: {e}")
-
-    return "\n".join(lines) if lines else "Empty IDR"
+    return _traverse(
+        idr_expr,
+        "IDR",
+        lambda obj: idr_for_each_entry(obj, entry_type),
+        format_expr=format_expr,
+        offset=offset,
+        limit=limit,
+        loop_vars=lambda item: {"id": item[0], "entry": item[1]},
+        default_fmt=lambda item: f"{item[0]}: {item[1].value_():#x}",
+        empty_msg="Empty IDR",
+    )

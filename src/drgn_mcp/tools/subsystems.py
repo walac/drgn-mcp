@@ -61,13 +61,13 @@ from drgn.helpers.linux.timer import (
     timer_base_names,
 )
 
-from drgn_mcp._app import _eval_expr, mcp
+from drgn_mcp._app import EVAL_ERRORS, _eval_expr, mcp
 from drgn_mcp.state import state
-from drgn_mcp.tools._helpers import truncate_output
+from drgn_mcp.tools._helpers import paginated_lines, truncate_output
 
 
 @mcp.tool()
-def list_netdevs(limit: int = 100) -> str:
+def list_netdevs(limit: int = 100, offset: int = 0) -> str:
     """List all network devices with their names and IP addresses.
 
     Use this to see network interfaces that were active at the time of the
@@ -75,6 +75,7 @@ def list_netdevs(limit: int = 100) -> str:
 
     Args:
         limit: Maximum number of devices to return.
+        offset: Number of devices to skip (for pagination).
 
     Returns:
         A multi-line string listing each network device with its name and
@@ -86,24 +87,25 @@ def list_netdevs(limit: int = 100) -> str:
     """
     prog = state.require_loaded()
 
-    lines = []
-    count = 0
-    for dev in for_each_netdev(prog, None):  # type: ignore[call-overload]  # ty: ignore[no-matching-overload]
-        if count >= limit:
-            lines.append(f"... (limited to {limit} devices)")
-            break
+    def fmt(dev):
         name = netdev_name(dev).decode(errors="replace")
         ipv4 = [str(a) for a in netdev_ipv4_addrs(dev)]
         ipv6 = [str(a) for a in netdev_ipv6_addrs(dev)]
         addrs = ", ".join(ipv4 + ipv6) or "no addresses"
-        lines.append(f"{name}: {addrs}")
-        count += 1
+        return f"{name}: {addrs}"
 
+    lines = paginated_lines(
+        for_each_netdev(prog, None),  # type: ignore[call-overload]  # ty: ignore[no-matching-overload]
+        fmt,
+        offset=offset,
+        limit=limit,
+        label="devices",
+    )
     return "\n".join(lines) if lines else "No network devices found"
 
 
 @mcp.tool()
-def list_mounts(limit: int = 200) -> str:
+def list_mounts(limit: int = 200, offset: int = 0) -> str:
     """List all mounted filesystems.
 
     Use this to see the mount table at the time of the crash, including
@@ -111,6 +113,7 @@ def list_mounts(limit: int = 200) -> str:
 
     Args:
         limit: Maximum number of mounts to return.
+        offset: Number of mounts to skip (for pagination).
 
     Returns:
         A multi-line string listing each mount with source, destination,
@@ -122,23 +125,24 @@ def list_mounts(limit: int = 200) -> str:
     """
     prog = state.require_loaded()
 
-    lines = []
-    count = 0
-    for mnt in for_each_mount(prog, None):  # type: ignore[call-overload]  # ty: ignore[no-matching-overload]
-        if count >= limit:
-            lines.append(f"... (limited to {limit} mounts)")
-            break
+    def fmt(mnt):
         src = mount_src(mnt).decode(errors="replace")
         dst = mount_dst(mnt).decode(errors="replace")
         fstype = mount_fstype(mnt).decode(errors="replace")
-        lines.append(f"{src} on {dst} type {fstype}")
-        count += 1
+        return f"{src} on {dst} type {fstype}"
 
+    lines = paginated_lines(
+        for_each_mount(prog, None),  # type: ignore[call-overload]  # ty: ignore[no-matching-overload]
+        fmt,
+        offset=offset,
+        limit=limit,
+        label="mounts",
+    )
     return "\n".join(lines) if lines else "No mounts found"
 
 
 @mcp.tool()
-def list_files(pid: int, limit: int = 100) -> str:
+def list_files(pid: int, limit: int = 100, offset: int = 0) -> str:
     """List all open files for a kernel task by PID.
 
     Use this to inspect a process's open file descriptors at crash time,
@@ -147,6 +151,7 @@ def list_files(pid: int, limit: int = 100) -> str:
     Args:
         pid: The PID of the task whose files to list.
         limit: Maximum number of files to return.
+        offset: Number of files to skip (for pagination).
 
     Returns:
         A multi-line string listing each open file with its fd number and
@@ -162,19 +167,17 @@ def list_files(pid: int, limit: int = 100) -> str:
     if task is None:
         return f"No task found with PID {pid}"
 
-    lines = []
-    count = 0
-    for fd, file in for_each_file(task):
-        if count >= limit:
-            lines.append(f"... (limited to {limit} files)")
-            break
+    def fmt(item):
+        fd, file = item
         try:
             path = d_path(file).decode(errors="replace")
         except drgn.FaultError:
             path = "<fault>"
-        lines.append(f"fd={fd} {path}")
-        count += 1
+        return f"fd={fd} {path}"
 
+    lines = paginated_lines(
+        for_each_file(task), fmt, offset=offset, limit=limit, label="files"
+    )
     return "\n".join(lines) if lines else "No open files"
 
 
@@ -203,14 +206,7 @@ def get_lock_info(lock_expr: str) -> str:
 
     try:
         lock_obj = _eval_expr(lock_expr)
-    except (
-        drgn.FaultError,
-        LookupError,
-        ValueError,
-        SyntaxError,
-        AttributeError,
-        TypeError,
-    ) as e:
+    except EVAL_ERRORS as e:
         return f"Error evaluating lock expression: {e}"
 
     type_name = lock_obj.type_.type_name()
@@ -242,7 +238,7 @@ def get_lock_info(lock_expr: str) -> str:
 
 
 @mcp.tool()
-def list_irqs(limit: int = 256) -> str:
+def list_irqs(limit: int = 256, offset: int = 0) -> str:
     """List all allocated interrupt descriptors.
 
     Use this to see IRQ numbers, controller chip names, and action handler
@@ -250,6 +246,7 @@ def list_irqs(limit: int = 256) -> str:
 
     Args:
         limit: Maximum number of IRQs to return.
+        offset: Number of IRQs to skip (for pagination).
 
     Returns:
         A multi-line string listing each IRQ with its number, chip name,
@@ -260,12 +257,8 @@ def list_irqs(limit: int = 256) -> str:
     """
     prog = state.require_loaded()
 
-    lines = []
-    count = 0
-    for irq_num, desc in for_each_irq_desc(prog):
-        if count >= limit:
-            lines.append(f"... (limited to {limit} IRQs)")
-            break
+    def fmt(item):
+        irq_num, desc = item
         chip = irq_desc_chip_name(desc)
         chip_str = chip.decode(errors="replace") if chip else "none"
         actions = irq_desc_action_names(desc)
@@ -274,14 +267,16 @@ def list_irqs(limit: int = 256) -> str:
             if actions
             else "none"
         )
-        lines.append(f"IRQ {irq_num}: chip={chip_str} actions=[{action_str}]")
-        count += 1
+        return f"IRQ {irq_num}: chip={chip_str} actions=[{action_str}]"
 
+    lines = paginated_lines(
+        for_each_irq_desc(prog), fmt, offset=offset, limit=limit, label="IRQs"
+    )
     return "\n".join(lines) if lines else "No IRQs found"
 
 
 @mcp.tool()
-def list_bpf(bpf_type: str = "progs", limit: int = 100) -> str:
+def list_bpf(bpf_type: str = "progs", limit: int = 100, offset: int = 0) -> str:
     """List BPF programs, maps, or links loaded in the kernel.
 
     Use this to inspect the BPF subsystem state at crash time.
@@ -293,6 +288,7 @@ def list_bpf(bpf_type: str = "progs", limit: int = 100) -> str:
             - "links": BPF links
             - "btf": BTF (BPF Type Format) objects
         limit: Maximum number of entries to return.
+        offset: Number of entries to skip (for pagination).
 
     Returns:
         A multi-line string listing BPF objects with their IDs and types.
@@ -305,14 +301,21 @@ def list_bpf(bpf_type: str = "progs", limit: int = 100) -> str:
         list_bpf("btf")
     """
     prog = state.require_loaded()
-    lines = []
+    offset = max(0, offset)
+    limit = max(1, limit)
+    lines: list[str] = []
+    skipped = 0
     count = 0
+    hint = f"... (limited to {limit} {bpf_type}, use offset={offset + limit} for next page)"
 
     match bpf_type:
         case "progs":
             for bpf_prog in bpf_prog_for_each(prog):
+                if skipped < offset:
+                    skipped += 1
+                    continue
                 if count >= limit:
-                    lines.append(f"... (limited to {limit} programs)")
+                    lines.append(hint)
                     break
                 prog_id = bpf_prog.aux.id.value_()
                 prog_type = bpf_prog.type.value_()
@@ -320,8 +323,11 @@ def list_bpf(bpf_type: str = "progs", limit: int = 100) -> str:
                 count += 1
         case "maps":
             for bpf_map in bpf_map_for_each(prog):
+                if skipped < offset:
+                    skipped += 1
+                    continue
                 if count >= limit:
-                    lines.append(f"... (limited to {limit} maps)")
+                    lines.append(hint)
                     break
                 map_id = bpf_map.id.value_()
                 map_type = bpf_map.map_type.value_()
@@ -330,8 +336,11 @@ def list_bpf(bpf_type: str = "progs", limit: int = 100) -> str:
                 count += 1
         case "links":
             for bpf_link in bpf_link_for_each(prog):
+                if skipped < offset:
+                    skipped += 1
+                    continue
                 if count >= limit:
-                    lines.append(f"... (limited to {limit} links)")
+                    lines.append(hint)
                     break
                 link_id = bpf_link.id.value_()
                 link_type = bpf_link.type.value_()
@@ -340,8 +349,11 @@ def list_bpf(bpf_type: str = "progs", limit: int = 100) -> str:
         case "btf":
             try:
                 for btf in bpf_btf_for_each(prog):
+                    if skipped < offset:
+                        skipped += 1
+                        continue
                     if count >= limit:
-                        lines.append(f"... (limited to {limit} BTF objects)")
+                        lines.append(hint)
                         break
                     try:
                         btf_id = btf.id.value_()
@@ -604,7 +616,7 @@ def get_cgroup(path: str = "/") -> str:
 
 
 @mcp.tool()
-def list_cgroups(path: str = "/", limit: int = 100) -> str:
+def list_cgroups(path: str = "/", limit: int = 100, offset: int = 0) -> str:
     """List cgroups in the default hierarchy starting from a given path.
 
     Traverses the cgroup tree in pre-order from the specified root path,
@@ -614,6 +626,7 @@ def list_cgroups(path: str = "/", limit: int = 100) -> str:
         path: The root cgroup path to start traversal from (e.g., "/",
             "/system.slice"). Defaults to the root.
         limit: Maximum number of cgroups to return.
+        offset: Number of cgroups to skip (for pagination).
 
     Returns:
         A multi-line string listing each cgroup's full path. Appends a
@@ -625,6 +638,8 @@ def list_cgroups(path: str = "/", limit: int = 100) -> str:
         list_cgroups("/system.slice", limit=50)
     """
     prog = state.require_loaded()
+    offset = max(0, offset)
+    limit = max(1, limit)
 
     try:
         cgrp = cgroup_get_from_path(prog, path)
@@ -634,12 +649,18 @@ def list_cgroups(path: str = "/", limit: int = 100) -> str:
     if not cgrp:
         return f"No cgroup found at path '{path}'"
 
-    lines = []
+    lines: list[str] = []
+    skipped = 0
     count = 0
     try:
         for css in css_for_each_descendant_pre(cgrp.self.address_of_()):
+            if skipped < offset:
+                skipped += 1
+                continue
             if count >= limit:
-                lines.append(f"... (limited to {limit} cgroups)")
+                lines.append(
+                    f"... (limited to {limit} cgroups, use offset={offset + limit} for next page)"
+                )
                 break
             child_cgrp = container_of(css, "struct cgroup", "self")
             child_path = cgroup_path(child_cgrp).decode(errors="replace")

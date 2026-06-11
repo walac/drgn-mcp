@@ -32,6 +32,38 @@ def truncate_output(
     return output[:max_len] + f"\n... (truncated, {total} total chars)"
 
 
+def paginated_lines(
+    iterator,
+    format_item,
+    *,
+    offset: int = 0,
+    limit: int = 100,
+    label: str = "entries",
+) -> list[str]:
+    """Collect formatted lines from an iterator with offset/limit pagination.
+
+    Returns a list of formatted strings. Appends a pagination hint when
+    the limit is reached so the LLM knows how to fetch the next page.
+    """
+    offset = max(0, offset)
+    limit = max(1, limit)
+    lines: list[str] = []
+    skipped = 0
+    count = 0
+    for item in iterator:
+        if skipped < offset:
+            skipped += 1
+            continue
+        if count >= limit:
+            lines.append(
+                f"... (limited to {limit} {label}, use offset={offset + limit} for next page)"
+            )
+            break
+        lines.append(format_item(item))
+        count += 1
+    return lines
+
+
 def format_hexdump(data: bytes, base_addr: int) -> str:
     """Format raw bytes as a hex dump with ASCII representation."""
     lines = []
