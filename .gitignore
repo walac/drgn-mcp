@@ -185,3 +185,25 @@ llm-logs/
 ai-logs/
 .llm-cache/
 .ai-cache/
+
+# apogee-managed-begin
+# Apogee lifecycle artifacts (private working state)
+apogee_artifacts/
+
+# Apogee local config (per-developer, not shared)
+.mcp.json
+.design-approved
+
+# Apogee runtime data
+.apogee/
+
+# Governance files (uncomment to untrack)
+# AGENTS.md
+# agent-policies/attribution.md
+# apogee-managed-end
+
+# Apogee IDE configs (developer-local, not committed)
+.claude/settings.json
+.semcode.db/
+agent-policies/
+apogee.toml
