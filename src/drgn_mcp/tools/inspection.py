@@ -310,7 +310,11 @@ def find_task(pid: int) -> str:
     task = _find_task(prog, pid)
     if task is None:
         return f"No task found with PID {pid}"
-    return str(task.format_(dereference=True))
+
+    try:
+        return str(task.format_(dereference=True))
+    except drgn.FaultError as e:
+        return f"Task {pid} found but memory fault during inspection: {e}"
 
 
 @mcp.tool()

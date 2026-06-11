@@ -2,6 +2,8 @@
 
 from typing import Literal
 
+import drgn
+
 MAX_OUTPUT_LEN = 8000
 
 
@@ -50,17 +52,23 @@ def paginated_lines(
     lines: list[str] = []
     skipped = 0
     count = 0
-    for item in iterator:
-        if skipped < offset:
-            skipped += 1
-            continue
-        if count >= limit:
-            lines.append(
-                f"... (limited to {limit} {label}, use offset={offset + limit} for next page)"
-            )
-            break
-        lines.append(format_item(item))
-        count += 1
+    try:
+        for item in iterator:
+            if skipped < offset:
+                skipped += 1
+                continue
+            if count >= limit:
+                lines.append(
+                    f"... (limited to {limit} {label}, use offset={offset + limit} for next page)"
+                )
+                break
+            try:
+                lines.append(format_item(item))
+            except drgn.FaultError as e:
+                lines.append(f"<fault: {e}>")
+            count += 1
+    except drgn.FaultError as e:
+        lines.append(f"... Traversal aborted due to memory fault: {e}")
     return lines
 
 

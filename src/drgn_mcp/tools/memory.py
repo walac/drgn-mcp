@@ -58,7 +58,12 @@ def read_memory(address: int | str, size: int = 64) -> str:
     prog = state.require_loaded()
     addr = parse_address(address)
     size = min(size, 4096)
-    data = prog.read(addr, size)
+
+    try:
+        data = prog.read(addr, size)
+    except drgn.FaultError as e:
+        return f"Memory fault at {addr:#x}: {e}"
+
     return format_hexdump(data, addr)
 
 
@@ -471,27 +476,36 @@ def get_vma_info(
 
     if address is not None:
         addr = parse_address(address)
-        vma = vma_find(mm, addr)
-        if not vma:
-            return f"No VMA contains address {addr:#x} in task {pid}"
-        name = vma_name(vma).decode(errors="replace")
-        return (
-            f"VMA: {vma.vm_start.value_():#x}-{vma.vm_end.value_():#x}\n"
-            f"Name: {name}\n"
-            f"Flags: {vma.vm_flags.value_():#x}"
-        )
+        try:
+            vma = vma_find(mm, addr)
+            if not vma:
+                return f"No VMA contains address {addr:#x} in task {pid}"
+            name = vma_name(vma).decode(errors="replace")
+            return (
+                f"VMA: {vma.vm_start.value_():#x}-{vma.vm_end.value_():#x}\n"
+                f"Name: {name}\n"
+                f"Flags: {vma.vm_flags.value_():#x}"
+            )
+        except drgn.FaultError as e:
+            return f"Memory fault looking up VMA at {addr:#x}: {e}"
 
     lines = []
     count = 0
-    for vma in for_each_vma(mm):
-        if count >= limit:
-            lines.append(f"... (limited to {limit} VMAs)")
-            break
-        start = vma.vm_start.value_()
-        end = vma.vm_end.value_()
-        name = vma_name(vma).decode(errors="replace")
-        lines.append(f"{start:#x}-{end:#x} {name}")
-        count += 1
+    try:
+        for vma in for_each_vma(mm):
+            if count >= limit:
+                lines.append(f"... (limited to {limit} VMAs)")
+                break
+            try:
+                start = vma.vm_start.value_()
+                end = vma.vm_end.value_()
+                name = vma_name(vma).decode(errors="replace")
+                lines.append(f"{start:#x}-{end:#x} {name}")
+            except drgn.FaultError as e:
+                lines.append(f"<fault: {e}>")
+            count += 1
+    except drgn.FaultError as e:
+        lines.append(f"... Traversal aborted due to memory fault: {e}")
 
     return "\n".join(lines) if lines else "No VMAs found"
 

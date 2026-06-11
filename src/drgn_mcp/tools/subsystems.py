@@ -310,42 +310,60 @@ def list_bpf(bpf_type: str = "progs", limit: int = 100, offset: int = 0) -> str:
 
     match bpf_type:
         case "progs":
-            for bpf_prog in bpf_prog_for_each(prog):
-                if skipped < offset:
-                    skipped += 1
-                    continue
-                if count >= limit:
-                    lines.append(hint)
-                    break
-                prog_id = bpf_prog.aux.id.value_()
-                prog_type = bpf_prog.type.value_()
-                lines.append(f"prog id={prog_id} type={prog_type}")
-                count += 1
+            try:
+                for bpf_prog in bpf_prog_for_each(prog):
+                    if skipped < offset:
+                        skipped += 1
+                        continue
+                    if count >= limit:
+                        lines.append(hint)
+                        break
+                    try:
+                        prog_id = bpf_prog.aux.id.value_()
+                        prog_type = bpf_prog.type.value_()
+                        lines.append(f"prog id={prog_id} type={prog_type}")
+                    except drgn.FaultError as e:
+                        lines.append(f"prog <fault: {e}>")
+                    count += 1
+            except drgn.FaultError as e:
+                lines.append(f"... Traversal aborted due to memory fault: {e}")
         case "maps":
-            for bpf_map in bpf_map_for_each(prog):
-                if skipped < offset:
-                    skipped += 1
-                    continue
-                if count >= limit:
-                    lines.append(hint)
-                    break
-                map_id = bpf_map.id.value_()
-                map_type = bpf_map.map_type.value_()
-                name = bpf_map.name.string_().decode(errors="replace")
-                lines.append(f"map id={map_id} type={map_type} name={name}")
-                count += 1
+            try:
+                for bpf_map in bpf_map_for_each(prog):
+                    if skipped < offset:
+                        skipped += 1
+                        continue
+                    if count >= limit:
+                        lines.append(hint)
+                        break
+                    try:
+                        map_id = bpf_map.id.value_()
+                        map_type = bpf_map.map_type.value_()
+                        name = bpf_map.name.string_().decode(errors="replace")
+                        lines.append(f"map id={map_id} type={map_type} name={name}")
+                    except drgn.FaultError as e:
+                        lines.append(f"map <fault: {e}>")
+                    count += 1
+            except drgn.FaultError as e:
+                lines.append(f"... Traversal aborted due to memory fault: {e}")
         case "links":
-            for bpf_link in bpf_link_for_each(prog):
-                if skipped < offset:
-                    skipped += 1
-                    continue
-                if count >= limit:
-                    lines.append(hint)
-                    break
-                link_id = bpf_link.id.value_()
-                link_type = bpf_link.type.value_()
-                lines.append(f"link id={link_id} type={link_type}")
-                count += 1
+            try:
+                for bpf_link in bpf_link_for_each(prog):
+                    if skipped < offset:
+                        skipped += 1
+                        continue
+                    if count >= limit:
+                        lines.append(hint)
+                        break
+                    try:
+                        link_id = bpf_link.id.value_()
+                        link_type = bpf_link.type.value_()
+                        lines.append(f"link id={link_id} type={link_type}")
+                    except drgn.FaultError as e:
+                        lines.append(f"link <fault: {e}>")
+                    count += 1
+            except drgn.FaultError as e:
+                lines.append(f"... Traversal aborted due to memory fault: {e}")
         case "btf":
             try:
                 for btf in bpf_btf_for_each(prog):
@@ -777,7 +795,12 @@ def get_loadavg() -> str:
         get_loadavg()
     """
     prog = state.require_loaded()
-    avg1, avg5, avg15 = loadavg(prog)
+
+    try:
+        avg1, avg5, avg15 = loadavg(prog)
+    except drgn.FaultError as e:
+        return f"Memory fault reading load averages: {e}"
+
     return f"Load average: {avg1:.2f}, {avg5:.2f}, {avg15:.2f}"
 
 
