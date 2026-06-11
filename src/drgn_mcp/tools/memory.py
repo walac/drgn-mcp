@@ -74,12 +74,14 @@ def get_dmesg() -> str:
     """
     prog = state.require_loaded()
 
-    lines = [
-        f"[{r.timestamp / 1_000_000_000:>12.6f}] {r.text}"
-        for r in get_printk_records(prog)
-    ]
-    output = "\n".join(lines)
+    lines = []
+    try:
+        for r in get_printk_records(prog):
+            lines.append(f"[{r.timestamp / 1_000_000_000:>12.6f}] {r.text}")
+    except drgn.FaultError as e:
+        lines.append(f"... Log buffer read aborted due to memory fault: {e}")
 
+    output = "\n".join(lines)
     return truncate_output(output, keep="tail")
 
 

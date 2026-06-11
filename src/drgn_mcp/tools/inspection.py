@@ -21,8 +21,20 @@ def get_crashed_thread() -> str:
         stack trace.
     """
     prog = state.require_loaded()
-    thread = prog.crashed_thread()
-    trace = thread.stack_trace()
+
+    try:
+        thread = prog.crashed_thread()
+    except ValueError as e:
+        return f"Could not determine crashed thread: {e}"
+
+    try:
+        trace = thread.stack_trace()
+    except (drgn.FaultError, ValueError) as e:
+        return (
+            f"Crashed thread: tid={thread.tid}, name={thread.name}\n\n"
+            f"Could not get stack trace: {e}"
+        )
+
     return (
         f"Crashed thread: tid={thread.tid}, name={thread.name}\n\nStack trace:\n{trace}"
     )
@@ -47,7 +59,14 @@ def get_stack_trace(thread_id: int) -> str:
         get_stack_trace(4096)
     """
     prog = state.require_loaded()
-    trace = prog.stack_trace(thread_id)
+
+    try:
+        trace = prog.stack_trace(thread_id)
+    except LookupError:
+        return f"No thread found with id={thread_id}"
+    except (drgn.FaultError, ValueError) as e:
+        return f"Cannot get stack trace for thread {thread_id}: {e}"
+
     return str(trace)
 
 
@@ -109,7 +128,7 @@ def get_thread(tid: int) -> str:
     try:
         trace = thread.stack_trace()
         lines.append(f"\nStack trace:\n{trace}")
-    except ValueError as e:
+    except (drgn.FaultError, ValueError) as e:
         lines.append(f"\nCould not get stack trace: {e}")
 
     return "\n".join(lines)
@@ -134,8 +153,14 @@ def lookup_object(name: str) -> str:
         lookup_object("init_task")
     """
     prog = state.require_loaded()
-    obj = prog[name]
-    return str(obj)
+
+    try:
+        obj = prog[name]
+        return str(obj)
+    except LookupError:
+        return f"No object found with name '{name}'. Check spelling or use lookup_symbol to search."
+    except drgn.FaultError as e:
+        return f"Memory fault reading '{name}': {e}"
 
 
 @mcp.tool()
@@ -157,7 +182,12 @@ def lookup_type(type_name: str) -> str:
         lookup_type("enum pid_type")
     """
     prog = state.require_loaded()
-    t = prog.type(type_name)
+
+    try:
+        t = prog.type(type_name)
+    except LookupError:
+        return f"No type found with name '{type_name}'. Check spelling (e.g., 'struct task_struct')."
+
     return str(t)
 
 
@@ -296,7 +326,13 @@ def list_modules() -> str:
     prog = state.require_loaded()
     from drgn.helpers.linux.module import for_each_module
 
-    names = [mod.name.string_().decode() for mod in for_each_module(prog)]
+    names = []
+    try:
+        for mod in for_each_module(prog):
+            names.append(mod.name.string_().decode(errors="replace"))
+    except drgn.FaultError as e:
+        names.append(f"... Traversal aborted due to memory fault: {e}")
+
     return "\n".join(names) if names else "No modules loaded"
 
 
