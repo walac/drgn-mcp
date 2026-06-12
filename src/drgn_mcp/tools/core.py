@@ -177,9 +177,9 @@ def eval_expression(expression: str, timeout: int = 30) -> str:
                 with contextlib.redirect_stdout(stdout_capture):
                     result = eval(code, state.globals)
             except SyntaxError:
-                code = compile(expression, "<eval>", "exec")  # noqa: S102
+                code = compile(expression, "<eval>", "exec")
                 with contextlib.redirect_stdout(stdout_capture):
-                    exec(code, state.globals)  # noqa: S102
+                    exec(code, state.globals)
         finally:
             if timeout > 0:
                 signal.alarm(0)

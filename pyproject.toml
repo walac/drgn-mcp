@@ -10,10 +10,14 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pyright", "ruff", "black"]
+dev = ["pyright", "black", "isort"]
 
 [tool.black]
 line-length = 100
+
+[tool.isort]
+line_length = 100
+profile = "black"
 
 [project.scripts]
 drgn-mcp = "drgn_mcp.server:main"

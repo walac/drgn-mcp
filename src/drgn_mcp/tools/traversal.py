@@ -71,7 +71,7 @@ def _traverse(
                 )
                 break
             if fmt_code:
-                lines.append(str(eval(fmt_code, state.globals, loop_vars(item))))  # noqa: S307
+                lines.append(str(eval(fmt_code, state.globals, loop_vars(item))))
             else:
                 lines.append(default_fmt(item))
             count += 1

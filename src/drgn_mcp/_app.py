@@ -66,4 +66,4 @@ def _eval_expr(expr: str) -> Any:
     Returns:
         The evaluated Python object (typically a drgn.Object).
     """
-    return eval(compile(expr, "<eval>", "eval"), state.globals)  # noqa: S307
+    return eval(compile(expr, "<eval>", "eval"), state.globals)
