@@ -6,7 +6,7 @@ license = "LGPL-2.1-or-later"
 requires-python = ">=3.12"
 dependencies = [
     "drgn",
-    "mcp[cli]",
+    "mcp>=2,<3",
 ]
 
 [dependency-groups]

@@ -2,6 +2,7 @@ from typing import Any, Optional
 
 import drgn
 import drgn.cli
+from mcp.server.mcpserver.exceptions import ToolError
 
 
 class DrgnState:
@@ -27,7 +28,7 @@ class DrgnState:
         Every MCP tool calls this before accessing the program.
         """
         if self.prog is None:
-            raise RuntimeError("No program loaded. Use load_core_dump first.")
+            raise ToolError("No program loaded. Use load_core_dump first.")
         return self.prog
 
     @property
@@ -48,34 +49,37 @@ class DrgnState:
     ) -> str:
         """Load a vmcore crash dump and initialize the debugging session.
 
-        Can only be called once. Subsequent calls raise RuntimeError.
+        Can only be called once. Subsequent calls raise ToolError.
         Missing debug info is reported as a warning rather than aborting
         the load, allowing inspection with partial symbol information.
         """
         if self.prog is not None:
-            raise RuntimeError("A program is already loaded. Restart the server to load a new one.")
+            raise ToolError("A program is already loaded. Restart the server to load a new one.")
 
-        prog = drgn.Program()
-        prog.set_core_dump(core_path)
-
-        symbols: list[str] = []
-        if vmlinux_path:
-            symbols.append(vmlinux_path)
-        if extra_symbols:
-            symbols.extend(extra_symbols)
-
-        missing_info = ""
         try:
-            if symbols:
-                prog.load_debug_info(symbols, default=True, main=True)
-            else:
-                prog.load_default_debug_info()
-        except drgn.MissingDebugInfoError as e:
-            missing_info = f"\nWarning: {e}"
+            prog = drgn.Program()
+            prog.set_core_dump(core_path)
 
-        self.prog = prog
-        self._globals = drgn.cli.default_globals(prog)
-        return self.format_program_info() + missing_info
+            symbols: list[str] = []
+            if vmlinux_path:
+                symbols.append(vmlinux_path)
+            if extra_symbols:
+                symbols.extend(extra_symbols)
+
+            missing_info = ""
+            try:
+                if symbols:
+                    prog.load_debug_info(symbols, default=True, main=True)
+                else:
+                    prog.load_default_debug_info()
+            except drgn.MissingDebugInfoError as e:
+                missing_info = f"\nWarning: {e}"
+
+            self.prog = prog
+            self._globals = drgn.cli.default_globals(prog)
+            return self.format_program_info() + missing_info
+        except (OSError, drgn.FaultError, ValueError) as e:
+            raise ToolError(str(e)) from e
 
     def format_program_info(self) -> str:
         """Format a summary of the loaded program's flags and platform."""

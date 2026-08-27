@@ -1,7 +1,8 @@
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 import drgn
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from drgn_mcp.state import state
 
@@ -50,7 +51,12 @@ Output from all tools is truncated at 8 KB to preserve context
 window space. Use limits and filters to narrow results.
 """
 
-mcp = FastMCP("drgn-mcp", instructions=_INSTRUCTIONS)
+try:
+    _VERSION = version("drgn-mcp")
+except PackageNotFoundError:
+    _VERSION = "0.0.0"
+
+mcp = MCPServer("drgn-mcp", instructions=_INSTRUCTIONS, version=_VERSION)
 
 
 def _eval_expr(expr: str) -> Any:

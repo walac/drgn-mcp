@@ -1,10 +1,11 @@
+import asyncio
 import contextlib
+import ctypes
 import importlib
 import inspect
 import io
 import pkgutil
-import signal
-import types
+import threading
 
 import drgn.helpers.linux
 
@@ -57,8 +58,52 @@ class _EvalTimeout(BaseException):
     """
 
 
-def _timeout_handler(signum: int, frame: types.FrameType | None) -> None:
-    raise _EvalTimeout
+# Only one eval_expression call may have a worker thread in flight at a time,
+# since they share the mutable state.globals eval context. Tracking the active
+# thread (rather than blocking on a lock) lets us fail fast with a clear error
+# when a previous call is still stuck, instead of a new call silently timing
+# out while waiting to acquire a lock that will never be released.
+_eval_state_lock = threading.Lock()
+_active_eval_thread: threading.Thread | None = None
+
+_set_async_exc = ctypes.pythonapi.PyThreadState_SetAsyncExc
+_set_async_exc.argtypes = [ctypes.c_ulong, ctypes.py_object]
+_set_async_exc.restype = ctypes.c_int
+
+
+def _raise_in_thread(thread: threading.Thread, exc_type: type[BaseException]) -> None:
+    """Inject *exc_type* into *thread* (CPython). Signal handlers only run on the main thread.
+
+    Only interrupts at Python bytecode boundaries — a thread blocked in
+    native code (e.g. a slow drgn/libkdumpfile call) will not be interrupted
+    until it returns to the interpreter. There is a narrow TOCTOU window
+    between the liveness check and the injection where CPython could reuse
+    *thread*'s ident for an unrelated thread; this is only ever called
+    immediately after the eval timeout fires, so the eval thread is
+    overwhelmingly likely to still be alive, and _active_eval_thread ensures
+    at most one eval worker thread exists at a time.
+    """
+    ident = thread.ident
+    if ident is None or not thread.is_alive():
+        return
+    affected = _set_async_exc(ctypes.c_ulong(ident), ctypes.py_object(exc_type))
+    if affected > 1:
+        _set_async_exc(ctypes.c_ulong(ident), None)
+
+
+def _eval_in_thread(expression: str, stdout_capture: _BoundedStringIO) -> object:
+    with contextlib.redirect_stdout(stdout_capture):
+        try:
+            code = compile(expression, "<eval>", "eval")
+            return eval(code, state.globals)
+        except SyntaxError:
+            code = compile(expression, "<eval>", "exec")
+            exec(code, state.globals)
+            return None
+
+
+async def _join_thread(thread: threading.Thread, timeout: float | None) -> None:
+    await asyncio.to_thread(thread.join, timeout)
 
 
 def _format_eval_error(exc: BaseException, expression: str, partial_output: str) -> str:
@@ -119,8 +164,10 @@ def _format_eval_error(exc: BaseException, expression: str, partial_output: str)
     return "\n\n".join(parts)
 
 
+# async so the event loop stays free; eval runs in a worker and is interrupted
+# with PyThreadState_SetAsyncExc (SIGALRM only fires on the main thread).
 @mcp.tool()
-def eval_expression(expression: str, timeout: int = 30) -> str:
+async def eval_expression(expression: str, timeout: int = 30) -> str:
     """Evaluate a drgn Python expression or statement.
 
     Use this as a catch-all for complex queries not covered by specialized tools.
@@ -162,35 +209,40 @@ def eval_expression(expression: str, timeout: int = 30) -> str:
     """
     state.require_loaded()
 
-    stdout_capture = _BoundedStringIO()
-    result = None
+    global _active_eval_thread
 
-    prev_handler = signal.getsignal(signal.SIGALRM)
-    prev_alarm = 0
-    try:
-        if timeout > 0:
-            signal.signal(signal.SIGALRM, _timeout_handler)
-            prev_alarm = signal.alarm(timeout)
+    stdout_capture = _BoundedStringIO()
+    result: object = None
+    worker_exc: BaseException | None = None
+
+    def worker() -> None:
+        nonlocal result, worker_exc
         try:
-            try:
-                code = compile(expression, "<eval>", "eval")
-                with contextlib.redirect_stdout(stdout_capture):
-                    result = eval(code, state.globals)
-            except SyntaxError:
-                code = compile(expression, "<eval>", "exec")
-                with contextlib.redirect_stdout(stdout_capture):
-                    exec(code, state.globals)
-        finally:
-            if timeout > 0:
-                signal.alarm(0)
-    except (Exception, _EvalTimeout) as exc:
-        partial = stdout_capture.getvalue()
-        return _format_eval_error(exc, expression, partial)
-    finally:
-        if timeout > 0:
-            signal.signal(signal.SIGALRM, prev_handler)
-            if prev_alarm > 0:
-                signal.alarm(prev_alarm)
+            result = _eval_in_thread(expression, stdout_capture)
+        except (Exception, _EvalTimeout) as exc:
+            worker_exc = exc
+
+    with _eval_state_lock:
+        if _active_eval_thread is not None and _active_eval_thread.is_alive():
+            return (
+                "Error: a previous eval_expression call is still running, likely "
+                "stuck in native code that could not be interrupted. The server "
+                "must be restarted before eval_expression can be used again."
+            )
+        thread = threading.Thread(target=worker, name="drgn-eval", daemon=True)
+        _active_eval_thread = thread
+
+    thread.start()
+    await _join_thread(thread, timeout if timeout > 0 else None)
+    timed_out = thread.is_alive()
+    if timed_out:
+        _raise_in_thread(thread, _EvalTimeout)
+        await _join_thread(thread, 1.0)
+
+    if worker_exc is not None:
+        return _format_eval_error(worker_exc, expression, stdout_capture.getvalue())
+    if timed_out:
+        return _format_eval_error(_EvalTimeout(), expression, stdout_capture.getvalue())
 
     output_parts = []
     stdout_str = stdout_capture.getvalue()
