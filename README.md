@@ -129,3 +129,37 @@ A typical workflow when debugging a kernel crash dump:
 | identify_address   | Classify what a memory address refers to         |
 | annotated_stack    | Stack trace with annotated memory values         |
 | read_percpu        | Read per-CPU variables                           |
+
+## Development
+
+Install the locked runtime and development tools (pytest, Black, isort,
+Pyright, Tombi):
+
+```bash
+uv sync --all-groups
+```
+
+Run the test suite. Tests use in-process fakes and do not require a kernel
+crash dump or vmlinux:
+
+```bash
+uv run pytest -v
+```
+
+Coverage is optional and has no threshold:
+
+```bash
+uv run pytest --cov=drgn_mcp --cov-report=term-missing
+```
+
+Format, type-check, and build. Tombi formats and lints TOML (`pyproject.toml`);
+Black and isort cover Python:
+
+```bash
+uv run black --check src tests
+uv run isort --check-only src tests
+uv run tombi format --check pyproject.toml
+uv run tombi lint pyproject.toml
+uv run pyright src tests
+uv build
+```

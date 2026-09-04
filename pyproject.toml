@@ -2,15 +2,30 @@
 name = "drgn-mcp"
 version = "0.1.0"
 description = "MCP server for drgn programmable debugger"
-license = "LGPL-2.1-or-later"
 requires-python = ">=3.12"
+license = "LGPL-2.1-or-later"
 dependencies = [
-    "drgn",
-    "mcp>=2,<3",
+  "drgn",
+  "mcp>=2,<3",
 ]
 
+[project.scripts]
+drgn-mcp = "drgn_mcp.server:main"
+
 [dependency-groups]
-dev = ["pyright", "black", "isort"]
+dev = [
+    "black",
+    "isort",
+    "pyright",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "tombi>=1.5.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.black]
 line-length = 100
@@ -19,9 +34,7 @@ line-length = 100
 line_length = 100
 profile = "black"
 
-[project.scripts]
-drgn-mcp = "drgn_mcp.server:main"
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+asyncio_mode = "auto"
