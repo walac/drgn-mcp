@@ -24,6 +24,16 @@ class FakeValue:
         return self._value
 
 
+class FaultyValue:
+    """Stand-in that raises from ``value_()`` to exercise per-object fault formatting."""
+
+    def __init__(self, error: BaseException) -> None:
+        self._error = error
+
+    def value_(self) -> int:
+        raise self._error
+
+
 class FakeBytes:
     """Stand-in for a drgn object whose bytes payload is read via string_()."""
 

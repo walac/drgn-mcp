@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from drgn_mcp.tools import inspection
-from tests.conftest import FakeBytes, FakeValue, Stringable, mark_loaded
+from tests.conftest import FakeBytes, FakeValue, FaultyValue, Stringable, mark_loaded
 
 
 def _symbol(
@@ -159,14 +159,6 @@ class _FaultyThread:
     @property
     def name(self) -> str:
         return "unused"
-
-
-class _FaultyValue:
-    def __init__(self, error: BaseException) -> None:
-        self._error = error
-
-    def value_(self) -> int:
-        raise self._error
 
 
 def test_list_threads_formats_item_fault(
@@ -451,7 +443,7 @@ def test_list_tasks_formats_item_fault(
 ) -> None:
     fault = drgn_error("fault", "bad pid", address=0x70)
     good = SimpleNamespace(pid=FakeValue(1), comm=FakeBytes(b"ok"))
-    bad = SimpleNamespace(pid=_FaultyValue(fault))
+    bad = SimpleNamespace(pid=FaultyValue(fault))
     monkeypatch.setattr("drgn.helpers.linux.pid.for_each_task", lambda prog: [good, bad])
     monkeypatch.setattr("drgn.helpers.linux.sched.task_state_to_char", lambda t: "R")
     mark_loaded()

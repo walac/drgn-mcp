@@ -6,17 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from drgn_mcp.tools import bpf, utils
-from tests.conftest import FakeBytes, FakeValue, Stringable, mark_loaded
-
-
-class _FaultyValue:
-    """Stand-in that raises from ``value_()`` to exercise per-object fault formatting."""
-
-    def __init__(self, error: BaseException) -> None:
-        self._error = error
-
-    def value_(self) -> int:
-        raise self._error
+from tests.conftest import FakeBytes, FakeValue, FaultyValue, Stringable, mark_loaded
 
 
 def _bpf_prog(prog_id: int, prog_type: int, name: bytes = b"handler") -> SimpleNamespace:
@@ -45,15 +35,15 @@ def _bpf_map(
 
 
 def _faulty_bpf_map(error: BaseException) -> SimpleNamespace:
-    return SimpleNamespace(id=_FaultyValue(error), map_type=FakeValue(1), name=FakeBytes(b"events"))
+    return SimpleNamespace(id=FaultyValue(error), map_type=FakeValue(1), name=FakeBytes(b"events"))
 
 
 def _faulty_bpf_link(error: BaseException) -> SimpleNamespace:
-    return SimpleNamespace(id=_FaultyValue(error), type=FakeValue(1))
+    return SimpleNamespace(id=FaultyValue(error), type=FakeValue(1))
 
 
 def _faulty_btf(error: BaseException) -> SimpleNamespace:
-    return SimpleNamespace(id=_FaultyValue(error), name=FakeBytes(b"vmlinux"))
+    return SimpleNamespace(id=FaultyValue(error), name=FakeBytes(b"vmlinux"))
 
 
 # --- list_bpf -----------------------------------------------------------------
@@ -123,7 +113,7 @@ def test_list_bpf_formats_item_and_traversal_faults(
     walk_fault = drgn_error("fault", "program walk", address=0x11)
 
     def programs(prog: object) -> Iterator[SimpleNamespace]:
-        yield SimpleNamespace(aux=SimpleNamespace(id=_FaultyValue(item_fault)), type=FakeValue(1))
+        yield SimpleNamespace(aux=SimpleNamespace(id=FaultyValue(item_fault)), type=FakeValue(1))
         raise walk_fault
 
     monkeypatch.setattr(bpf, "bpf_prog_for_each", programs)
@@ -247,7 +237,7 @@ def test_get_bpf_prog_reports_missing_lookup_and_read_faults(
 
     read_fault = drgn_error("fault", "aux unavailable", address=0x13)
     broken = SimpleNamespace(
-        type=_FaultyValue(read_fault), aux=SimpleNamespace(name=FakeBytes(b"xdp"))
+        type=FaultyValue(read_fault), aux=SimpleNamespace(name=FakeBytes(b"xdp"))
     )
     monkeypatch.setattr(bpf, "bpf_prog_by_id", lambda prog, prog_id: broken)
     assert bpf.get_bpf_prog(42) == f"Memory fault reading BPF program 42: {read_fault}"
@@ -388,7 +378,7 @@ def test_get_cgroup_bpf_limits_and_formats_faults(
 
     def attached(cgrp: object, attach_type: int) -> Iterator[SimpleNamespace]:
         yield _bpf_prog(1, 2)
-        yield SimpleNamespace(aux=SimpleNamespace(id=_FaultyValue(item_fault)), type=FakeValue(3))
+        yield SimpleNamespace(aux=SimpleNamespace(id=FaultyValue(item_fault)), type=FakeValue(3))
         yield _bpf_prog(4, 5)
         yield _bpf_prog(6, 7)
 
@@ -424,6 +414,8 @@ def test_get_cgroup_bpf_reports_missing_lookup_and_traversal_faults(
     monkeypatch.setattr(bpf, "cgroup_get_from_path", lambda prog, path: object())
 
     def attached(cgrp: object, attach_type: int) -> Iterator[SimpleNamespace]:
+        # Yielding makes this a generator so the fault occurs on first next().
+        yield from ()
         raise walk_fault
 
     monkeypatch.setattr(bpf, "cgroup_bpf_prog_for_each", attached)

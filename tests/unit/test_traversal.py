@@ -7,7 +7,7 @@ import pytest
 
 from drgn_mcp.state import state
 from drgn_mcp.tools import traversal
-from tests.conftest import FakeValue, Stringable, mark_loaded
+from tests.conftest import FakeValue, FaultyValue, Stringable, mark_loaded
 
 INVALID_FORMAT_EXPR = "entry."
 NEXT_PAGE = "... (limited to 2 entries, use offset=3 for next page)"
@@ -20,16 +20,6 @@ def _invalid_format_output() -> str:
     except SyntaxError as e:
         return f"Syntax error in format_expr: {e}"
     raise AssertionError(f"{INVALID_FORMAT_EXPR!r} compiled as eval")
-
-
-class _FaultyValue:
-    """Stand-in whose value_() raises, matching default_fmt's only access."""
-
-    def __init__(self, error: BaseException) -> None:
-        self._error = error
-
-    def value_(self) -> int:
-        raise self._error
 
 
 def _head(type_name: str) -> SimpleNamespace:
@@ -217,7 +207,7 @@ def test_traverse_list_aborts_on_per_entry_fault(
     _stub_helper(
         monkeypatch,
         "list_for_each_entry",
-        [FakeValue(0x1000), _FaultyValue(fault)],
+        [FakeValue(0x1000), FaultyValue(fault)],
     )
     _stub_eval(monkeypatch, _head("struct list_head"))
 
@@ -234,7 +224,7 @@ def test_traverse_list_aborts_on_format_expr_fault(
     _stub_helper(
         monkeypatch,
         "list_for_each_entry",
-        [FakeValue(0x1000), _FaultyValue(fault)],
+        [FakeValue(0x1000), FaultyValue(fault)],
     )
     _stub_eval(monkeypatch, _head("struct list_head"))
 
@@ -452,7 +442,7 @@ def test_traverse_rbtree_aborts_on_per_entry_fault(
     _stub_helper(
         monkeypatch,
         "rbtree_inorder_for_each_entry",
-        [FakeValue(0x4000), _FaultyValue(fault)],
+        [FakeValue(0x4000), FaultyValue(fault)],
     )
     _stub_eval(monkeypatch, SimpleNamespace())
 
@@ -580,7 +570,7 @@ def test_traverse_xarray_aborts_on_per_entry_fault(
     _stub_helper(
         monkeypatch,
         "xa_for_each",
-        [(0, FakeValue(0x6000)), (1, _FaultyValue(fault))],
+        [(0, FakeValue(0x6000)), (1, FaultyValue(fault))],
     )
     _stub_eval(monkeypatch, SimpleNamespace())
 
@@ -699,7 +689,7 @@ def test_traverse_idr_aborts_on_per_entry_fault(
     _stub_helper(
         monkeypatch,
         "idr_for_each_entry",
-        [(1, FakeValue(0x8000)), (2, _FaultyValue(fault))],
+        [(1, FakeValue(0x8000)), (2, FaultyValue(fault))],
     )
     _stub_eval(monkeypatch, SimpleNamespace())
 

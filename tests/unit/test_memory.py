@@ -7,7 +7,7 @@ import pytest
 
 from drgn_mcp.tools import memory
 from drgn_mcp.tools._helpers import MAX_OUTPUT_LEN
-from tests.conftest import FakeBytes, FakeValue, Stringable, mark_loaded
+from tests.conftest import FakeBytes, FakeValue, FaultyValue, Stringable, mark_loaded
 
 
 class _PageSizeProgram:
@@ -730,11 +730,7 @@ def test_get_vma_info_formats_item_fault(
     fault = drgn_error("fault", "bad vma", address=0x61)
     good = _vma(start=0x1000, end=0x2000)
 
-    class _FaultyValue:
-        def value_(self) -> int:
-            raise fault
-
-    bad = SimpleNamespace(vm_start=_FaultyValue())
+    bad = SimpleNamespace(vm_start=FaultyValue(fault))
 
     monkeypatch.setattr(memory, "_find_task", lambda prog, pid: _user_task())
     monkeypatch.setattr(memory, "for_each_vma", lambda mm: [good, bad])
