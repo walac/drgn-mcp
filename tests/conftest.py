@@ -34,6 +34,22 @@ class FakeBytes:
         return self._value
 
 
+class Stringable:
+    """Stand-in whose text appears only through ``str()``.
+
+    Tools that format results with ``str(...)`` or f-string interpolation would
+    still pass if the fake returned a plain string and production dropped that
+    call. This wrapper fails the equality assert unless the tool actually
+    stringifies the object.
+    """
+
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    def __str__(self) -> str:
+        return self._text
+
+
 def make_fake_program(**attrs: Any) -> SimpleNamespace:
     """Minimal Program stand-in exposing only attributes the caller needs.
 
@@ -45,6 +61,16 @@ def make_fake_program(**attrs: Any) -> SimpleNamespace:
     for name, value in attrs.items():
         setattr(program, name, value)
     return program
+
+
+def mark_loaded(program: object | None = None) -> None:
+    """Mark the session as holding a dump so tools skip the unloaded gate.
+
+    Pass a program stand-in when the tool under test reads ``state.prog``.
+    Defaults to ``make_fake_program()`` so tools that only call
+    ``require_loaded()`` still see a loaded session.
+    """
+    state.prog = program if program is not None else make_fake_program()  # type: ignore[assignment]
 
 
 def make_drgn_error(

@@ -10,7 +10,7 @@ import pytest
 from drgn_mcp.state import state
 from drgn_mcp.tools import core
 from drgn_mcp.tools._helpers import truncate_output
-from tests.conftest import make_fake_program
+from tests.conftest import mark_loaded
 
 
 class _Uninspectable:
@@ -22,10 +22,6 @@ class _Uninspectable:
     @property
     def __signature__(self) -> inspect.Signature:
         raise ValueError("no signature")
-
-
-def _mark_loaded() -> None:
-    state.prog = make_fake_program()  # type: ignore[assignment]
 
 
 def _install_fake_linux_helpers(
@@ -97,7 +93,7 @@ def test_get_program_info_delegates_formatting(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_list_helpers_summary_lists_sorted_module_counts(monkeypatch: pytest.MonkeyPatch) -> None:
-    _mark_loaded()
+    mark_loaded()
     _install_fake_linux_helpers(
         monkeypatch,
         {
@@ -119,7 +115,7 @@ def test_list_helpers_module_shows_signature_and_first_doc_line(
         """
         return "ok"
 
-    _mark_loaded()
+    mark_loaded()
     _install_fake_linux_helpers(
         monkeypatch,
         {
@@ -141,7 +137,7 @@ def test_list_helpers_module_shows_signature_and_first_doc_line(
 
 
 def test_list_helpers_rejects_unknown_module(monkeypatch: pytest.MonkeyPatch) -> None:
-    _mark_loaded()
+    mark_loaded()
     _install_fake_linux_helpers(
         monkeypatch,
         {
@@ -156,7 +152,7 @@ def test_list_helpers_rejects_unknown_module(monkeypatch: pytest.MonkeyPatch) ->
 def test_list_helpers_uses_ellipsis_for_uninspectable_callable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _mark_loaded()
+    mark_loaded()
     _install_fake_linux_helpers(
         monkeypatch,
         {
@@ -175,7 +171,7 @@ def test_list_helpers_truncates_long_module_output(monkeypatch: pytest.MonkeyPat
 
     huge.__doc__ = "H" * 9000
 
-    _mark_loaded()
+    mark_loaded()
     _install_fake_linux_helpers(
         monkeypatch,
         {"mm": SimpleNamespace(__all__=["huge"], huge=huge)},
@@ -272,7 +268,7 @@ def test_format_eval_error_truncates_partial_output() -> None:
 
 
 async def test_eval_expression_returns_value_and_allows_a_second_call() -> None:
-    _mark_loaded()
+    mark_loaded()
     assert await core.eval_expression("1") == "1"
     assert await core.eval_expression("2") == "2"
 
@@ -282,18 +278,18 @@ async def test_eval_expression_includes_stdout_and_value() -> None:
         print("computing")
         return 42
 
-    _mark_loaded()
+    mark_loaded()
     state._globals = {"answer": answer}
     assert await core.eval_expression("answer()") == "computing\n\n42"
 
 
 async def test_eval_expression_reports_no_output() -> None:
-    _mark_loaded()
+    mark_loaded()
     assert await core.eval_expression("None") == "(no output)"
 
 
 async def test_eval_expression_returns_error_string_instead_of_raising() -> None:
-    _mark_loaded()
+    mark_loaded()
     result = await core.eval_expression("missing")
     assert result.startswith("Error (NameError):")
     assert "Expression: missing" in result
@@ -311,7 +307,7 @@ async def test_eval_expression_times_out_python_loop(monkeypatch: pytest.MonkeyP
         while not stop.is_set():
             pass
 
-    _mark_loaded()
+    mark_loaded()
     state._globals = {"spin": spin}
 
     joins = 0
@@ -353,7 +349,7 @@ async def test_eval_expression_rejects_a_live_worker() -> None:
     worker.start()
     assert started.wait(timeout=1.0)
 
-    _mark_loaded()
+    mark_loaded()
     core._active_eval_thread = worker
     try:
         result = await core.eval_expression("1")

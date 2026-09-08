@@ -5,13 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from drgn_mcp.state import state
 from drgn_mcp.tools import inspection
-from tests.conftest import FakeBytes, FakeValue, make_fake_program
-
-
-def _mark_loaded(program: object | None = None) -> None:
-    state.prog = program if program is not None else make_fake_program()  # type: ignore[assignment]
+from tests.conftest import FakeBytes, FakeValue, Stringable, mark_loaded
 
 
 def _symbol(
@@ -31,23 +26,6 @@ def _symbol(
     )
 
 
-class _Stringable:
-    """Object whose text appears only through ``str()``.
-
-    ``lookup_object``, ``lookup_type``, and ``find_task`` format results with
-    ``str(...)`` (or ``str(task.format_())``). Returning a plain string from the
-    fake would make those calls no-ops, so dropping them in production would
-    still pass. This wrapper fails the equality assert unless the tool actually
-    stringifies the object.
-    """
-
-    def __init__(self, text: str) -> None:
-        self._text = text
-
-    def __str__(self) -> str:
-        return self._text
-
-
 # --- get_crashed_thread -------------------------------------------------------
 
 
@@ -55,7 +33,7 @@ def test_get_crashed_thread_formats_tid_name_and_stack(
     fake_program: Callable[..., SimpleNamespace],
 ) -> None:
     thread = SimpleNamespace(tid=1, name="swapper/0", stack_trace=lambda: "#0 panic")
-    _mark_loaded(fake_program(crashed_thread=lambda: thread))
+    mark_loaded(fake_program(crashed_thread=lambda: thread))
 
     assert inspection.get_crashed_thread() == (
         "Crashed thread: tid=1, name=swapper/0\n\nStack trace:\n#0 panic"
@@ -68,7 +46,7 @@ def test_get_crashed_thread_reports_missing_thread(
     def crashed_thread() -> None:
         raise ValueError("no crashed thread")
 
-    _mark_loaded(fake_program(crashed_thread=crashed_thread))
+    mark_loaded(fake_program(crashed_thread=crashed_thread))
 
     assert (
         inspection.get_crashed_thread() == "Could not determine crashed thread: no crashed thread"
@@ -87,7 +65,7 @@ def test_get_crashed_thread_keeps_metadata_when_stack_fails(
         raise error
 
     thread = SimpleNamespace(tid=42, name="kthreadd", stack_trace=stack_trace)
-    _mark_loaded(fake_program(crashed_thread=lambda: thread))
+    mark_loaded(fake_program(crashed_thread=lambda: thread))
 
     assert inspection.get_crashed_thread() == (
         f"Crashed thread: tid=42, name=kthreadd\n\nCould not get stack trace: {error}"
@@ -100,7 +78,7 @@ def test_get_crashed_thread_keeps_metadata_when_stack_fails(
 def test_get_stack_trace_returns_trace_string(
     fake_program: Callable[..., SimpleNamespace],
 ) -> None:
-    _mark_loaded(fake_program(stack_trace=lambda thread_id: f"#0 foo tid={thread_id}"))
+    mark_loaded(fake_program(stack_trace=lambda thread_id: f"#0 foo tid={thread_id}"))
 
     assert inspection.get_stack_trace(4096) == "#0 foo tid=4096"
 
@@ -111,7 +89,7 @@ def test_get_stack_trace_reports_missing_thread(
     def stack_trace(thread_id: int) -> str:
         raise LookupError(thread_id)
 
-    _mark_loaded(fake_program(stack_trace=stack_trace))
+    mark_loaded(fake_program(stack_trace=stack_trace))
 
     assert inspection.get_stack_trace(99) == "No thread found with id=99"
 
@@ -127,7 +105,7 @@ def test_get_stack_trace_reports_unwind_errors(
     def stack_trace(thread_id: int) -> str:
         raise error
 
-    _mark_loaded(fake_program(stack_trace=stack_trace))
+    mark_loaded(fake_program(stack_trace=stack_trace))
 
     assert inspection.get_stack_trace(7) == f"Cannot get stack trace for thread 7: {error}"
 
@@ -142,7 +120,7 @@ def test_list_threads_formats_tid_and_name(
         SimpleNamespace(tid=1, name="swapper/0"),
         SimpleNamespace(tid=2, name="kthreadd"),
     ]
-    _mark_loaded(fake_program(threads=lambda: threads))
+    mark_loaded(fake_program(threads=lambda: threads))
 
     assert inspection.list_threads() == "tid=1 name=swapper/0\ntid=2 name=kthreadd"
 
@@ -150,7 +128,7 @@ def test_list_threads_formats_tid_and_name(
 def test_list_threads_reports_empty_program(
     fake_program: Callable[..., SimpleNamespace],
 ) -> None:
-    _mark_loaded(fake_program(threads=lambda: []))
+    mark_loaded(fake_program(threads=lambda: []))
 
     assert inspection.list_threads() == "No threads found"
 
@@ -159,7 +137,7 @@ def test_list_threads_appends_next_page_hint(
     fake_program: Callable[..., SimpleNamespace],
 ) -> None:
     threads = [SimpleNamespace(tid=i, name=f"t{i}") for i in range(1, 5)]
-    _mark_loaded(fake_program(threads=lambda: threads))
+    mark_loaded(fake_program(threads=lambda: threads))
 
     assert inspection.list_threads(limit=2, offset=1) == "\n".join(
         [
@@ -197,7 +175,7 @@ def test_list_threads_formats_item_fault(
 ) -> None:
     fault = drgn_error("fault", "bad thread", address=0x40)
     good = SimpleNamespace(tid=1, name="ok")
-    _mark_loaded(fake_program(threads=lambda: [good, _FaultyThread(fault)]))
+    mark_loaded(fake_program(threads=lambda: [good, _FaultyThread(fault)]))
 
     assert inspection.list_threads() == f"tid=1 name=ok\n<fault: {fault}>"
 
@@ -213,7 +191,7 @@ def test_list_threads_aborts_on_iterator_fault(
         yield good
         raise fault
 
-    _mark_loaded(fake_program(threads=threads))
+    mark_loaded(fake_program(threads=threads))
 
     assert inspection.list_threads() == (
         f"tid=1 name=ok\n... Traversal aborted due to memory fault: {fault}"
@@ -226,7 +204,7 @@ def test_list_threads_aborts_on_iterator_fault(
 def test_get_thread_formats_metadata_and_stack(
     fake_program: Callable[..., SimpleNamespace],
 ) -> None:
-    _mark_loaded(
+    mark_loaded(
         fake_program(
             thread=lambda tid: SimpleNamespace(
                 tid=tid, name="init", stack_trace=lambda: "#0 rest_init"
@@ -245,7 +223,7 @@ def test_get_thread_reports_missing_tid(
     def thread(tid: int) -> SimpleNamespace:
         raise LookupError(tid)
 
-    _mark_loaded(fake_program(thread=thread))
+    mark_loaded(fake_program(thread=thread))
 
     assert inspection.get_thread(1234) == "No thread found with tid=1234"
 
@@ -264,7 +242,7 @@ def test_get_thread_reports_stack_failure(
     def thread(tid: int) -> SimpleNamespace:
         return SimpleNamespace(tid=tid, name="kworker", stack_trace=stack_trace)
 
-    _mark_loaded(fake_program(thread=thread))
+    mark_loaded(fake_program(thread=thread))
 
     assert inspection.get_thread(10) == (
         f"Thread: tid=10, name=kworker\n\nCould not get stack trace: {error}"
@@ -289,13 +267,13 @@ class _ObjectProgram:
 
 
 def test_lookup_object_returns_object_string() -> None:
-    _mark_loaded(_ObjectProgram({"jiffies": _Stringable("(unsigned long)jiffies = 12345")}))
+    mark_loaded(_ObjectProgram({"jiffies": Stringable("(unsigned long)jiffies = 12345")}))
 
     assert inspection.lookup_object("jiffies") == "(unsigned long)jiffies = 12345"
 
 
 def test_lookup_object_reports_missing_name() -> None:
-    _mark_loaded(_ObjectProgram({}))
+    mark_loaded(_ObjectProgram({}))
 
     assert inspection.lookup_object("no_such_var") == (
         "No object found with name 'no_such_var'. Check spelling or use lookup_symbol to search."
@@ -304,7 +282,7 @@ def test_lookup_object_reports_missing_name() -> None:
 
 def test_lookup_object_reports_memory_fault(drgn_error: Callable[..., BaseException]) -> None:
     fault = drgn_error("fault", "unmapped", address=0x60)
-    _mark_loaded(_ObjectProgram({"init_task": fault}))
+    mark_loaded(_ObjectProgram({"init_task": fault}))
 
     assert inspection.lookup_object("init_task") == f"Memory fault reading 'init_task': {fault}"
 
@@ -313,12 +291,12 @@ def test_lookup_object_reports_memory_fault(drgn_error: Callable[..., BaseExcept
 
 
 def test_lookup_type_returns_type_string(fake_program: Callable[..., SimpleNamespace]) -> None:
-    def type_lookup(type_name: str) -> _Stringable:
+    def type_lookup(type_name: str) -> Stringable:
         if type_name == "struct task_struct":
-            return _Stringable("struct task_struct {\n    pid_t pid;\n}")
+            return Stringable("struct task_struct {\n    pid_t pid;\n}")
         raise LookupError(type_name)
 
-    _mark_loaded(fake_program(type=type_lookup))
+    mark_loaded(fake_program(type=type_lookup))
 
     assert inspection.lookup_type("struct task_struct") == (
         "struct task_struct {\n    pid_t pid;\n}"
@@ -329,7 +307,7 @@ def test_lookup_type_reports_missing_name(fake_program: Callable[..., SimpleName
     def type_lookup(type_name: str) -> str:
         raise LookupError(type_name)
 
-    _mark_loaded(fake_program(type=type_lookup))
+    mark_loaded(fake_program(type=type_lookup))
 
     assert inspection.lookup_type("struct missing") == (
         "No type found with name 'struct missing'. Check spelling (e.g., 'struct task_struct')."
@@ -343,7 +321,7 @@ def test_lookup_symbol_by_address_without_offset(
     fake_program: Callable[..., SimpleNamespace],
 ) -> None:
     sym = _symbol(name="schedule", address=0xFFFFFFFF81000000, size=128)
-    _mark_loaded(fake_program(symbol=lambda address: sym))
+    mark_loaded(fake_program(symbol=lambda address: sym))
 
     assert inspection.lookup_symbol(0xFFFFFFFF81000000) == "\n".join(
         [
@@ -360,7 +338,7 @@ def test_lookup_symbol_by_address_appends_offset(
     fake_program: Callable[..., SimpleNamespace],
 ) -> None:
     sym = _symbol(name="schedule", address=0xFFFFFFFF81000000, size=128)
-    _mark_loaded(fake_program(symbol=lambda address: sym))
+    mark_loaded(fake_program(symbol=lambda address: sym))
 
     assert inspection.lookup_symbol(0xFFFFFFFF81000010) == (
         "name=schedule+0x10\n"
@@ -375,7 +353,7 @@ def test_lookup_symbol_hex_string_uses_address_path(
     fake_program: Callable[..., SimpleNamespace],
 ) -> None:
     sym = _symbol(name="kmalloc", address=0x1000, size=32, binding="LOCAL", kind="OBJECT")
-    _mark_loaded(fake_program(symbol=lambda address: sym))
+    mark_loaded(fake_program(symbol=lambda address: sym))
 
     assert inspection.lookup_symbol("0x1000") == (
         "name=kmalloc\naddress=0x1000\nsize=32\nbinding=LOCAL\nkind=OBJECT"
@@ -388,7 +366,7 @@ def test_lookup_symbol_by_address_reports_missing(
     def symbol(address: int) -> SimpleNamespace:
         raise LookupError(address)
 
-    _mark_loaded(fake_program(symbol=symbol))
+    mark_loaded(fake_program(symbol=symbol))
 
     assert inspection.lookup_symbol(0xABCD) == "No symbol found containing address 0xabcd"
 
@@ -398,7 +376,7 @@ def test_lookup_symbol_by_name_lists_matches(fake_program: Callable[..., SimpleN
         _symbol(name="foo", address=0x1000, size=8),
         _symbol(name="foo", address=0x2000, size=16, binding="WEAK", kind="OBJECT"),
     ]
-    _mark_loaded(fake_program(symbols=lambda name: syms))
+    mark_loaded(fake_program(symbols=lambda name: syms))
 
     assert inspection.lookup_symbol("foo") == (
         "name=foo address=0x1000 size=8 binding=GLOBAL kind=FUNC\n"
@@ -409,7 +387,7 @@ def test_lookup_symbol_by_name_lists_matches(fake_program: Callable[..., SimpleN
 def test_lookup_symbol_by_name_reports_missing(
     fake_program: Callable[..., SimpleNamespace],
 ) -> None:
-    _mark_loaded(fake_program(symbols=lambda name: []))
+    mark_loaded(fake_program(symbols=lambda name: []))
 
     assert inspection.lookup_symbol("nope") == "No symbol found with name 'nope'"
 
@@ -418,7 +396,7 @@ def test_lookup_symbol_by_name_truncates_at_limit(
     fake_program: Callable[..., SimpleNamespace],
 ) -> None:
     syms = [_symbol(name="bar", address=0x1000 + i, size=4) for i in range(3)]
-    _mark_loaded(fake_program(symbols=lambda name: syms))
+    mark_loaded(fake_program(symbols=lambda name: syms))
 
     assert inspection.lookup_symbol("bar", limit=1) == (
         "name=bar address=0x1000 size=4 binding=GLOBAL kind=FUNC\n"
@@ -433,7 +411,7 @@ def test_list_tasks_formats_pid_comm_and_state(monkeypatch: pytest.MonkeyPatch) 
     task = SimpleNamespace(pid=FakeValue(1), comm=FakeBytes(b"systemd"))
     monkeypatch.setattr("drgn.helpers.linux.pid.for_each_task", lambda prog: [task])
     monkeypatch.setattr("drgn.helpers.linux.sched.task_state_to_char", lambda t: "S")
-    _mark_loaded()
+    mark_loaded()
 
     assert inspection.list_tasks() == "pid=1 comm=systemd state=S"
 
@@ -442,14 +420,14 @@ def test_list_tasks_replaces_invalid_comm_bytes(monkeypatch: pytest.MonkeyPatch)
     task = SimpleNamespace(pid=FakeValue(1), comm=FakeBytes(b"kthreadd\xff"))
     monkeypatch.setattr("drgn.helpers.linux.pid.for_each_task", lambda prog: [task])
     monkeypatch.setattr("drgn.helpers.linux.sched.task_state_to_char", lambda t: "S")
-    _mark_loaded()
+    mark_loaded()
 
     assert inspection.list_tasks() == "pid=1 comm=kthreadd\ufffd state=S"
 
 
 def test_list_tasks_reports_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("drgn.helpers.linux.pid.for_each_task", lambda prog: [])
-    _mark_loaded()
+    mark_loaded()
 
     assert inspection.list_tasks() == "No tasks found"
 
@@ -460,7 +438,7 @@ def test_list_tasks_appends_next_page_hint(monkeypatch: pytest.MonkeyPatch) -> N
     ]
     monkeypatch.setattr("drgn.helpers.linux.pid.for_each_task", lambda prog: tasks)
     monkeypatch.setattr("drgn.helpers.linux.sched.task_state_to_char", lambda t: "R")
-    _mark_loaded()
+    mark_loaded()
 
     assert inspection.list_tasks(limit=1, offset=1) == (
         "pid=2 comm=t2 state=R\n... (limited to 1 tasks, use offset=2 for next page)"
@@ -476,7 +454,7 @@ def test_list_tasks_formats_item_fault(
     bad = SimpleNamespace(pid=_FaultyValue(fault))
     monkeypatch.setattr("drgn.helpers.linux.pid.for_each_task", lambda prog: [good, bad])
     monkeypatch.setattr("drgn.helpers.linux.sched.task_state_to_char", lambda t: "R")
-    _mark_loaded()
+    mark_loaded()
 
     assert inspection.list_tasks() == f"pid=1 comm=ok state=R\n<fault: {fault}>"
 
@@ -494,7 +472,7 @@ def test_list_tasks_aborts_on_iterator_fault(
 
     monkeypatch.setattr("drgn.helpers.linux.pid.for_each_task", tasks)
     monkeypatch.setattr("drgn.helpers.linux.sched.task_state_to_char", lambda t: "R")
-    _mark_loaded()
+    mark_loaded()
 
     assert inspection.list_tasks() == (
         f"pid=1 comm=ok state=R\n... Traversal aborted due to memory fault: {fault}"
@@ -506,17 +484,17 @@ def test_list_tasks_aborts_on_iterator_fault(
 
 def test_find_task_returns_formatted_struct(monkeypatch: pytest.MonkeyPatch) -> None:
     task = SimpleNamespace(
-        format_=lambda dereference=True: _Stringable("struct task_struct { pid = 1 }")
+        format_=lambda dereference=True: Stringable("struct task_struct { pid = 1 }")
     )
     monkeypatch.setattr("drgn.helpers.linux.pid.find_task", lambda prog, pid: task)
-    _mark_loaded()
+    mark_loaded()
 
     assert inspection.find_task(1) == "struct task_struct { pid = 1 }"
 
 
 def test_find_task_reports_missing_pid(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("drgn.helpers.linux.pid.find_task", lambda prog, pid: None)
-    _mark_loaded()
+    mark_loaded()
 
     assert inspection.find_task(99) == "No task found with PID 99"
 
@@ -534,7 +512,7 @@ def test_find_task_reports_format_fault(
         "drgn.helpers.linux.pid.find_task",
         lambda prog, pid: SimpleNamespace(format_=format_),
     )
-    _mark_loaded()
+    mark_loaded()
 
     assert inspection.find_task(5) == f"Task 5 found but memory fault during inspection: {fault}"
 
@@ -545,7 +523,7 @@ def test_find_task_reports_format_fault(
 def test_list_modules_formats_names(monkeypatch: pytest.MonkeyPatch) -> None:
     modules = [SimpleNamespace(name=FakeBytes(b"ext4")), SimpleNamespace(name=FakeBytes(b"xfs"))]
     monkeypatch.setattr("drgn.helpers.linux.module.for_each_module", lambda prog: modules)
-    _mark_loaded()
+    mark_loaded()
 
     assert inspection.list_modules() == "ext4\nxfs"
 
@@ -553,14 +531,14 @@ def test_list_modules_formats_names(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_list_modules_replaces_invalid_name_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
     modules = [SimpleNamespace(name=FakeBytes(b"ext4\xff"))]
     monkeypatch.setattr("drgn.helpers.linux.module.for_each_module", lambda prog: modules)
-    _mark_loaded()
+    mark_loaded()
 
     assert inspection.list_modules() == "ext4\ufffd"
 
 
 def test_list_modules_reports_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("drgn.helpers.linux.module.for_each_module", lambda prog: [])
-    _mark_loaded()
+    mark_loaded()
 
     assert inspection.list_modules() == "No modules loaded"
 
@@ -577,7 +555,7 @@ def test_list_modules_appends_traversal_fault(
         raise fault
 
     monkeypatch.setattr("drgn.helpers.linux.module.for_each_module", modules)
-    _mark_loaded()
+    mark_loaded()
 
     assert inspection.list_modules() == f"ext4\n... Traversal aborted due to memory fault: {fault}"
 
@@ -593,7 +571,7 @@ def test_get_panic_info_formats_message_and_crashed_thread(
     monkeypatch.setattr(
         inspection, "panic_message", lambda prog: "Kernel panic - not syncing: sysrq"
     )
-    _mark_loaded(fake_program(crashed_thread=lambda: thread))
+    mark_loaded(fake_program(crashed_thread=lambda: thread))
 
     assert inspection.get_panic_info() == (
         "Panic message: Kernel panic - not syncing: sysrq\n"
@@ -618,7 +596,7 @@ def test_get_panic_info_reports_panic_message_errors(
 
     thread = SimpleNamespace(tid=2, stack_trace=lambda: "#0 oops")
     monkeypatch.setattr(inspection, "panic_message", panic_message)
-    _mark_loaded(fake_program(crashed_thread=lambda: thread))
+    mark_loaded(fake_program(crashed_thread=lambda: thread))
 
     assert inspection.get_panic_info() == (
         f"Could not retrieve panic message: {error}\n"
@@ -637,7 +615,7 @@ def test_get_panic_info_reports_missing_crashed_thread(
         raise ValueError("no PT_REGS")
 
     monkeypatch.setattr(inspection, "panic_message", lambda prog: "Oops")
-    _mark_loaded(fake_program(crashed_thread=crashed_thread))
+    mark_loaded(fake_program(crashed_thread=crashed_thread))
 
     assert inspection.get_panic_info() == (
         "Panic message: Oops\n\nCould not retrieve crashed thread: no PT_REGS"
@@ -656,7 +634,7 @@ def test_get_panic_info_propagates_stack_unwind_fault(
 
     thread = SimpleNamespace(tid=1, stack_trace=stack_trace)
     monkeypatch.setattr(inspection, "panic_message", lambda prog: "Oops")
-    _mark_loaded(fake_program(crashed_thread=lambda: thread))
+    mark_loaded(fake_program(crashed_thread=lambda: thread))
 
     with pytest.raises(type(fault)) as caught:
         inspection.get_panic_info()
