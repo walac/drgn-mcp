@@ -14,13 +14,13 @@ drgn-mcp = "drgn_mcp.server:main"
 
 [dependency-groups]
 dev = [
-    "black",
-    "isort",
-    "pyright",
-    "pytest",
-    "pytest-asyncio",
-    "pytest-cov",
-    "tombi>=1.5.1",
+  "black",
+  "isort",
+  "pyright",
+  "pytest",
+  "pytest-asyncio",
+  "pytest-cov",
+  "tombi>=1.5.1",
 ]
 
 [build-system]
