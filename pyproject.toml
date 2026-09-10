@@ -5,7 +5,7 @@ description = "MCP server for drgn programmable debugger"
 requires-python = ">=3.12"
 license = "LGPL-2.1-or-later"
 dependencies = [
-  "drgn",
+  "drgn ~= 0.2",
   "mcp>=2,<3",
 ]
 
