@@ -1,4 +1,4 @@
-import drgn_mcp.tools  # registers all 54 MCP tools
+import drgn_mcp.tools  # registers all 56 MCP tools
 from drgn_mcp._app import mcp
 
 

@@ -50,6 +50,8 @@ EXPECTED_TOOL_NAMES = {
     "list_modules",
     "list_mounts",
     "list_netdevs",
+    "list_sysfs",
+    "lookup_sysfs",
     "list_tasks",
     "list_threads",
     "list_timers",

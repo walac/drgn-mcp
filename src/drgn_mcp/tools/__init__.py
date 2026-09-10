@@ -7,6 +7,7 @@ from drgn_mcp.tools import (
     memory,
     net,
     sched,
+    sysfs,
     sysinfo,
     traversal,
     utils,

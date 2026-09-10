@@ -107,6 +107,8 @@ A typical workflow when debugging a kernel crash dump:
 | traverse_xarray    | Traverse XArray index-to-pointer mappings        |
 | traverse_idr       | Traverse IDR integer-to-pointer mappings         |
 | list_netdevs       | List network devices with IP addresses           |
+| list_sysfs         | List children of a sysfs directory               |
+| lookup_sysfs       | Resolve a sysfs path to a kernel object          |
 | list_mounts        | List mounted filesystems                         |
 | list_files         | List open files for a process                    |
 | get_lock_info      | Inspect mutex/rwsem lock state                   |
