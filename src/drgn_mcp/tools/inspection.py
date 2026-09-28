@@ -364,7 +364,7 @@ def get_panic_info() -> str:
         trace = thread.stack_trace()
         lines.append(f"\nCrashed thread: tid={thread.tid}")
         lines.append(f"Stack trace:\n{trace}")
-    except ValueError as e:
+    except (drgn.FaultError, ValueError) as e:
         lines.append(f"\nCould not retrieve crashed thread: {e}")
 
     return "\n".join(lines)

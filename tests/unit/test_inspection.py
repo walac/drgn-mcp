@@ -614,7 +614,25 @@ def test_get_panic_info_reports_missing_crashed_thread(
     )
 
 
-def test_get_panic_info_propagates_stack_unwind_fault(
+def test_get_panic_info_reports_crashed_thread_fault(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_program: Callable[..., SimpleNamespace],
+    drgn_error: Callable[..., BaseException],
+) -> None:
+    fault = drgn_error("fault", "cannot read crashed thread", address=0xC0)
+
+    def crashed_thread() -> None:
+        raise fault
+
+    monkeypatch.setattr(inspection, "panic_message", lambda prog: "Oops")
+    mark_loaded(fake_program(crashed_thread=crashed_thread))
+
+    assert inspection.get_panic_info() == (
+        f"Panic message: Oops\n\nCould not retrieve crashed thread: {fault}"
+    )
+
+
+def test_get_panic_info_reports_stack_unwind_fault(
     monkeypatch: pytest.MonkeyPatch,
     fake_program: Callable[..., SimpleNamespace],
     drgn_error: Callable[..., BaseException],
@@ -628,6 +646,6 @@ def test_get_panic_info_propagates_stack_unwind_fault(
     monkeypatch.setattr(inspection, "panic_message", lambda prog: "Oops")
     mark_loaded(fake_program(crashed_thread=lambda: thread))
 
-    with pytest.raises(type(fault)) as caught:
-        inspection.get_panic_info()
-    assert caught.value is fault
+    assert inspection.get_panic_info() == (
+        f"Panic message: Oops\n\nCould not retrieve crashed thread: {fault}"
+    )
