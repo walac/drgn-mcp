@@ -71,7 +71,10 @@ def _traverse(
                 )
                 break
             if fmt_code:
-                lines.append(str(eval(fmt_code, state.globals, loop_vars(item))))
+                try:
+                    lines.append(str(eval(fmt_code, state.globals, loop_vars(item))))
+                except EVAL_ERRORS as e:
+                    lines.append(f"<format_expr error: {e}>")
             else:
                 lines.append(default_fmt(item))
             count += 1

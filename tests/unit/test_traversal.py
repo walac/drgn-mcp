@@ -216,15 +216,18 @@ def test_traverse_list_aborts_on_per_entry_fault(
     )
 
 
-def test_traverse_list_aborts_on_format_expr_fault(
+@pytest.mark.parametrize("kind", ["fault", "lookup"])
+def test_traverse_list_continues_after_format_expr_error(
     monkeypatch: pytest.MonkeyPatch,
     drgn_error: Callable[..., BaseException],
+    kind: str,
 ) -> None:
-    fault = drgn_error("fault", "bad format", address=0x14)
+    # A failed formatter produces one error line and leaves later entries visible.
+    fault = drgn_error(kind, "bad format", address=0x14)
     _stub_helper(
         monkeypatch,
         "list_for_each_entry",
-        [FakeValue(0x1000), FaultyValue(fault)],
+        [FakeValue(0x1000), FaultyValue(fault), FakeValue(0x2000)],
     )
     _stub_eval(monkeypatch, _head("struct list_head"))
 
@@ -235,7 +238,7 @@ def test_traverse_list_aborts_on_format_expr_fault(
             "sibling",
             format_expr="f'{entry.value_():#x}'",
         )
-        == f"0x1000\n{_abort(fault)}"
+        == f"0x1000\n<format_expr error: {fault}>\n0x2000"
     )
 
 
