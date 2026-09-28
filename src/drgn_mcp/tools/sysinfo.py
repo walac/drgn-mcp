@@ -88,7 +88,10 @@ def get_kconfig(key: str = "") -> str:
     """
     prog = state.require_loaded()
 
-    config = _get_kconfig(prog)
+    try:
+        config = _get_kconfig(prog)
+    except (LookupError, drgn.FaultError, OSError) as e:
+        return f"Kernel configuration unavailable: {e}"
 
     if key:
         value = config.get(key)

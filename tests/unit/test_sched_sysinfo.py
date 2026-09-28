@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from types import SimpleNamespace
 
+import drgn
 import pytest
 
 from drgn_mcp.tools import sched, sysinfo
@@ -473,6 +474,28 @@ def test_get_kconfig_truncates_long_listing(monkeypatch: pytest.MonkeyPatch) -> 
 
     listing = "\n".join(f"{key}={value}" for key, value in sorted(config.items()))
     assert sysinfo.get_kconfig() == truncate_output(listing)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        LookupError("CONFIG_IKCONFIG is disabled"),
+        drgn.FaultError("config memory unreadable", 0x80),
+        OSError("config read failed"),
+    ],
+)
+@pytest.mark.parametrize("key", ["", "CONFIG_SMP"])
+def test_get_kconfig_reports_unavailable_config(
+    monkeypatch: pytest.MonkeyPatch, error: BaseException, key: str
+) -> None:
+    # A missing or unreadable kernel config should produce a tool response for either request.
+    def fail_get_kconfig(prog: object) -> None:
+        raise error
+
+    monkeypatch.setattr(sysinfo, "_get_kconfig", fail_get_kconfig)
+    mark_loaded()
+
+    assert sysinfo.get_kconfig(key) == f"Kernel configuration unavailable: {error}"
 
 
 @pytest.mark.parametrize(
